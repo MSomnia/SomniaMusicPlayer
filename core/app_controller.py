@@ -6,9 +6,7 @@ from core.player import UnifiedPlayer
 from core.queue import PlayQueue
 from core.vlc_backend import VLCBackend
 from db.repository import AppRepository
-# NeteaseAuth is imported lazily (inside methods) to avoid importing
-# QtWebEngineWidgets at module load time (it requires AA_ShareOpenGLContexts
-# to be set before QApplication is created).
+from platforms.netease.auth import NeteaseAuth
 from platforms.netease.client import NeteaseClient
 
 
@@ -21,6 +19,7 @@ class AppController(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._repo = AppRepository()
+        self._auth = NeteaseAuth(self._repo)
         self._client: NeteaseClient | None = None
         self._player = UnifiedPlayer()
         self._vlc = VLCBackend()
@@ -41,10 +40,8 @@ class AppController(QObject):
         self._player.position_changed.connect(self.position_changed)
 
     async def init(self) -> None:
-        from platforms.netease.auth import NeteaseAuth
         await self._repo.init()
-        auth = NeteaseAuth(self._repo)
-        cookies = await auth.load_cookies()
+        cookies = await self._auth.load_cookies()
         if cookies:
             self._client = NeteaseClient(cookies)
             self.netease_auth_changed.emit(True)
@@ -52,9 +49,7 @@ class AppController(QObject):
     async def ensure_netease_auth(self, parent=None) -> bool:
         if self._client is not None:
             return True
-        from platforms.netease.auth import NeteaseAuth
-        auth = NeteaseAuth(self._repo)
-        cookies = await auth.login(parent)
+        cookies = await self._auth.login(parent)
         if cookies:
             self._client = NeteaseClient(cookies)
             self.netease_auth_changed.emit(True)
