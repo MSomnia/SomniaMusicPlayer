@@ -33,8 +33,9 @@ class NeteaseLyrics:
                 f"{_BASE_URL}/weapi/song/lyric/v1", data=payload
             )
             resp.raise_for_status()
-
-        data = resp.json()
+            if not resp.content:
+                return []
+            data = resp.json()
         lrc_text = data.get("lrc", {}).get("lyric", "")
         if not lrc_text:
             return []

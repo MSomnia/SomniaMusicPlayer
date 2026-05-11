@@ -58,6 +58,9 @@ class MainWindow(QMainWindow):
         ctrl.netease_auth_changed.connect(
             lambda ok: self.sidebar.set_platform_status("netease", ok)
         )
+        # ctrl.init() runs before MainWindow is constructed, so the signal fires
+        # before the connection exists — sync the initial state explicitly here.
+        self.sidebar.set_platform_status("netease", ctrl.is_netease_authenticated)
         self.now_playing.play_pause_clicked.connect(ctrl.toggle_play_pause)
         self.now_playing.seek_requested.connect(ctrl.seek)
         self.now_playing.next_clicked.connect(

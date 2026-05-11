@@ -34,8 +34,9 @@ class NeteaseClient(AbstractPlatform):
                 f"{_BASE_URL}/weapi/cloudsearch/pc", data=payload
             )
             resp.raise_for_status()
-
-        data = resp.json()
+            if not resp.content:
+                return []
+            data = resp.json()
         songs = data.get("result", {}).get("songs", [])
         return [self._song_to_track(s) for s in songs]
 
@@ -53,8 +54,9 @@ class NeteaseClient(AbstractPlatform):
                 f"{_BASE_URL}/weapi/song/enhance/player/url/v1", data=payload
             )
             resp.raise_for_status()
-
-        data = resp.json()
+            if not resp.content:
+                raise RuntimeError(f"Empty response for track {track.id}")
+            data = resp.json()
         items = data.get("data", [])
         if not items or not items[0].get("url"):
             raise RuntimeError(f"No stream URL for track {track.id}")
@@ -65,8 +67,9 @@ class NeteaseClient(AbstractPlatform):
         return await NeteaseLyrics(self._cookies).get_lyrics(track)
 
     async def get_library_playlists(self) -> list[Playlist]:
+        uid = await self._get_uid()
         payload = weapi_encrypt({
-            "uid": "",
+            "uid": uid,
             "limit": 50,
             "offset": 0,
             "csrf_token": self._cookies.get("__csrf", ""),
@@ -78,8 +81,9 @@ class NeteaseClient(AbstractPlatform):
                 f"{_BASE_URL}/weapi/user/playlist", data=payload
             )
             resp.raise_for_status()
-
-        data = resp.json()
+            if not resp.content:
+                return []
+            data = resp.json()
         playlists = data.get("playlist", [])
         return [
             Playlist(
@@ -91,6 +95,20 @@ class NeteaseClient(AbstractPlatform):
             )
             for p in playlists
         ]
+
+    async def _get_uid(self) -> str:
+        payload = weapi_encrypt({"csrf_token": self._cookies.get("__csrf", "")})
+        async with httpx.AsyncClient(
+            headers=_HEADERS, cookies=self._cookies
+        ) as http:
+            resp = await http.post(
+                f"{_BASE_URL}/weapi/nuser/account/get", data=payload
+            )
+            resp.raise_for_status()
+            if not resp.content:
+                return ""
+            data = resp.json()
+        return str(data.get("account", {}).get("id", ""))
 
     @staticmethod
     def _song_to_track(song: dict) -> Track:

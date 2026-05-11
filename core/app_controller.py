@@ -1,5 +1,8 @@
 from __future__ import annotations
 import asyncio
+import logging
+import shutil
+import httpx
 from PyQt6.QtCore import QObject, pyqtSignal
 from core.models import Track, PlayerState
 from core.player import UnifiedPlayer
@@ -7,7 +10,11 @@ from core.queue import PlayQueue
 from core.vlc_backend import VLCBackend
 from db.repository import AppRepository
 from platforms.netease.auth import NeteaseAuth
-from platforms.netease.client import NeteaseClient
+from platforms.netease.proxy_client import NeteaseProxyClient, DEFAULT_PROXY_URL
+
+logger = logging.getLogger(__name__)
+
+_PROXY_READY_TIMEOUT = 15  # seconds
 
 
 class AppController(QObject):
@@ -20,10 +27,11 @@ class AppController(QObject):
         super().__init__()
         self._repo = AppRepository()
         self._auth = NeteaseAuth(self._repo)
-        self._client: NeteaseClient | None = None
+        self._client: NeteaseProxyClient | None = None
         self._player = UnifiedPlayer()
         self._vlc = VLCBackend()
         self._queue = PlayQueue()
+        self._proxy_process: asyncio.subprocess.Process | None = None
         self._wire_internal()
 
     @property
@@ -41,17 +49,47 @@ class AppController(QObject):
 
     async def init(self) -> None:
         await self._repo.init()
+        await self._ensure_proxy()
         cookies = await self._auth.load_cookies()
         if cookies:
-            self._client = NeteaseClient(cookies)
+            self._client = NeteaseProxyClient(cookies)
             self.netease_auth_changed.emit(True)
+
+    async def _ensure_proxy(self) -> None:
+        if await self._proxy_is_ready():
+            logger.info("Netease proxy already running at %s", DEFAULT_PROXY_URL)
+            return
+        npx = shutil.which("npx")
+        if not npx:
+            logger.warning("npx not found — cannot auto-start Netease proxy")
+            return
+        logger.info("Starting Netease proxy …")
+        self._proxy_process = await asyncio.create_subprocess_exec(
+            npx, "NeteaseCloudMusicApi",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        for _ in range(_PROXY_READY_TIMEOUT * 2):
+            await asyncio.sleep(0.5)
+            if await self._proxy_is_ready():
+                logger.info("Netease proxy ready")
+                return
+        logger.error("Netease proxy did not become ready within %ds", _PROXY_READY_TIMEOUT)
+
+    async def _proxy_is_ready(self) -> bool:
+        try:
+            async with httpx.AsyncClient() as http:
+                r = await http.get(DEFAULT_PROXY_URL, timeout=1.0)
+                return r.status_code < 500
+        except Exception:
+            return False
 
     async def ensure_netease_auth(self, parent: "QWidget | None" = None) -> bool:
         if self._client is not None:
             return True
         cookies = await self._auth.login(parent)
         if cookies:
-            self._client = NeteaseClient(cookies)
+            self._client = NeteaseProxyClient(cookies)
             self.netease_auth_changed.emit(True)
             return True
         return False
@@ -112,3 +150,10 @@ class AppController(QObject):
 
     async def close(self) -> None:
         await self._repo.close()
+        if self._proxy_process is not None:
+            self._proxy_process.terminate()
+            try:
+                await asyncio.wait_for(self._proxy_process.wait(), timeout=3.0)
+            except asyncio.TimeoutError:
+                self._proxy_process.kill()
+            self._proxy_process = None

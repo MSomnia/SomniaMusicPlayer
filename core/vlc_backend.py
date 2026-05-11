@@ -1,10 +1,14 @@
 from __future__ import annotations
+import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QMetaObject, Qt, Q_ARG
+
+logger = logging.getLogger(__name__)
 
 try:
     import vlc
-except Exception:
+except Exception as _vlc_err:
     vlc = None  # type: ignore[assignment]
+    logger.warning("python-vlc could not load libvlc: %s — audio playback disabled. Install VLC: https://www.videolan.org", _vlc_err)
 
 
 class VLCBackend(QObject):
@@ -82,6 +86,8 @@ class VLCBackend(QObject):
 
     def play(self, url: str) -> None:
         if self._player is None:
+            logger.error("VLC unavailable — cannot play %s", url)
+            self.error_occurred.emit("VLC 未安装，无法播放音频。请安装 VLC: https://www.videolan.org")
             return
         media = self._instance.media_new(url)
         self._player.set_media(media)
