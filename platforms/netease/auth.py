@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio
 from PyQt6.QtWidgets import QWidget
-from ui.components.login_dialog import LoginDialog
 from db.repository import AppRepository
 
 _NETEASE_LOGIN_URL = "https://music.163.com/#/login"
@@ -19,6 +18,7 @@ class NeteaseAuth:
         return cred
 
     async def login(self, parent: QWidget | None = None) -> dict[str, str] | None:
+        from ui.components.login_dialog import LoginDialog  # lazy: needs WebEngine
         loop = asyncio.get_event_loop()
         future: asyncio.Future[dict[str, str] | None] = loop.create_future()
 
