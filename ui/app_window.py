@@ -135,12 +135,16 @@ class MainWindow(QMainWindow):
         ctrl.netease_auth_changed.connect(
             lambda ok: self.sidebar.set_platform_status("netease", ok)
         )
+        ctrl.ytmusic_auth_changed.connect(
+            lambda ok: self.sidebar.set_platform_status("ytmusic", ok)
+        )
         ctrl.lyrics_ready.connect(self._lyrics_view.set_lyrics)
         ctrl.cover_color_ready.connect(self._lyrics_view.set_cover_color)
         ctrl.cover_art_bytes.connect(self.now_playing.set_cover_pixmap_from_bytes)
         # ctrl.init() runs before MainWindow is constructed, so the signal fires
         # before the connection exists — sync the initial state explicitly here.
         self.sidebar.set_platform_status("netease", ctrl.is_netease_authenticated)
+        self.sidebar.set_platform_status("ytmusic", ctrl.is_ytmusic_authenticated)
         self.now_playing.play_pause_clicked.connect(ctrl.toggle_play_pause)
         self.now_playing.seek_requested.connect(ctrl.seek)
         self.now_playing.next_clicked.connect(
@@ -192,6 +196,8 @@ class MainWindow(QMainWindow):
     def _on_platform_login(self, platform_id: str) -> None:
         if platform_id == "netease":
             asyncio.ensure_future(self._ctrl.ensure_netease_auth(self))
+        elif platform_id == "ytmusic":
+            asyncio.ensure_future(self._ctrl.ensure_ytmusic_auth(self))
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(f"""
