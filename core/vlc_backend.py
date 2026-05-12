@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from PyQt6.QtCore import QObject, pyqtSignal, QMetaObject, Qt, Q_ARG
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, pyqtSlot, QMetaObject, Qt, Q_ARG
 
 logger = logging.getLogger(__name__)
 
@@ -8,90 +8,100 @@ try:
     import vlc
 except Exception as _vlc_err:
     vlc = None  # type: ignore[assignment]
-    logger.warning("python-vlc could not load libvlc: %s — audio playback disabled. Install VLC: https://www.videolan.org", _vlc_err)
+    logger.warning(
+        "python-vlc could not load libvlc: %s — audio playback disabled. "
+        "Install VLC: https://www.videolan.org",
+        _vlc_err,
+    )
 
 
 class VLCBackend(QObject):
-    """python-vlc wrapper that marshals VLC events back to the Qt main thread."""
+    """python-vlc wrapper.
+
+    Position is polled via a QTimer running on the main thread (250 ms) to
+    avoid the thread-safety pitfalls of invoking Qt slots from VLC's internal
+    callback threads.  End-reached and error events still use the VLC event
+    manager, marshalled back through invokeMethod with proper @pyqtSlot
+    decorators so Qt's meta-object system can find them.
+    """
 
     position_changed = pyqtSignal(int)   # ms
     end_reached = pyqtSignal()
     error_occurred = pyqtSignal(str)
+
+    _POLL_MS = 250  # position poll interval
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         if vlc is None:
             self._instance = None
             self._player = None
-            return
-        self._instance = vlc.Instance("--no-xlib")
-        self._player = self._instance.media_player_new()
-        self._wire_events()
+        else:
+            self._instance = vlc.Instance("--no-xlib")
+            self._player = self._instance.media_player_new()
+            self._wire_events()
+
+        # Main-thread timer for position polling — no cross-thread signal needed
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(self._POLL_MS)
+        self._poll_timer.timeout.connect(self._on_poll)
+
+        self._last_ended = False  # debounce end-reached from polling
 
     def _wire_events(self) -> None:
-        if self._player is None:
-            return
         em = self._player.event_manager()
-        em.event_attach(
-            vlc.EventType.MediaPlayerTimeChanged,
-            self._on_time_changed,
-        )
-        em.event_attach(
-            vlc.EventType.MediaPlayerEndReached,
-            self._on_end_reached,
-        )
-        em.event_attach(
-            vlc.EventType.MediaPlayerEncounteredError,
-            self._on_error,
-        )
+        em.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_end_reached)
+        em.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_error)
 
-    # ── VLC event callbacks (background thread) ───────────────────────────────
-
-    def _on_time_changed(self, event) -> None:
-        ms = self._player.get_time()
-        QMetaObject.invokeMethod(
-            self,
-            "_emit_position",
-            Qt.ConnectionType.QueuedConnection,
-            Q_ARG(int, ms),
-        )
+    # ── VLC event callbacks (VLC background thread) ───────────────────────────
 
     def _on_end_reached(self, event) -> None:
-        QMetaObject.invokeMethod(
-            self,
-            "_emit_end",
-            Qt.ConnectionType.QueuedConnection,
-        )
+        QMetaObject.invokeMethod(self, "_emit_end", Qt.ConnectionType.QueuedConnection)
 
     def _on_error(self, event) -> None:
         QMetaObject.invokeMethod(
-            self,
-            "_emit_error",
+            self, "_emit_error",
             Qt.ConnectionType.QueuedConnection,
             Q_ARG(str, "VLC playback error"),
         )
 
     # ── Qt slots (main thread) ────────────────────────────────────────────────
 
-    def _emit_position(self, ms: int) -> None:
-        self.position_changed.emit(ms)
+    @pyqtSlot()
+    def _on_poll(self) -> None:
+        """Called by the main-thread timer; safe to emit Qt signals here."""
+        if self._player is None:
+            return
+        ms = self._player.get_time()
+        if isinstance(ms, int) and ms >= 0:
+            self.position_changed.emit(ms)
 
+    @pyqtSlot()
     def _emit_end(self) -> None:
+        self._poll_timer.stop()
         self.end_reached.emit()
 
+    @pyqtSlot(str)
     def _emit_error(self, msg: str) -> None:
+        self._poll_timer.stop()
         self.error_occurred.emit(msg)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def play(self, url: str) -> None:
+    def play(self, url: str, vlc_options: list[str] | None = None) -> None:
         if self._player is None:
             logger.error("VLC unavailable — cannot play %s", url)
-            self.error_occurred.emit("VLC 未安装，无法播放音频。请安装 VLC: https://www.videolan.org")
+            self.error_occurred.emit(
+                "VLC 未安装，无法播放音频。请安装 VLC: https://www.videolan.org"
+            )
             return
+        self._last_ended = False
         media = self._instance.media_new(url)
+        for opt in (vlc_options or []):
+            media.add_option(opt)
         self._player.set_media(media)
         self._player.play()
+        self._poll_timer.start()
 
     def pause(self) -> None:
         if self._player is None:
@@ -101,6 +111,7 @@ class VLCBackend(QObject):
     def stop(self) -> None:
         if self._player is None:
             return
+        self._poll_timer.stop()
         self._player.stop()
 
     def seek(self, position_ms: int) -> None:

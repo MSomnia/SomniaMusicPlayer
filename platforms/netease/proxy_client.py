@@ -91,6 +91,31 @@ class NeteaseProxyClient(AbstractPlatform):
             for p in playlists
         ]
 
+    async def get_home(self) -> list[tuple[str, list[Track]]]:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(
+                f"{self._base}/recommend/songs",
+                params={"cookie": self._cookie_str()},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        songs = data.get("data", {}).get("dailySongs", [])
+        tracks = [self._song_to_track(s) for s in songs]
+        return [("每日推荐", tracks)] if tracks else []
+
+    async def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(
+                f"{self._base}/playlist/track/all",
+                params={"id": playlist_id, "limit": 200, "cookie": self._cookie_str()},
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        songs = data.get("songs", [])
+        return [self._song_to_track(s) for s in songs]
+
     async def _get_uid(self) -> str:
         if self._uid:
             return self._uid

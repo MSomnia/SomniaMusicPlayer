@@ -13,11 +13,27 @@ class _MockCtrl(QObject):
     position_changed = pyqtSignal(int)
     search_results_ready = pyqtSignal(list)
     netease_auth_changed = pyqtSignal(bool)
+    ytmusic_auth_changed = pyqtSignal(bool)
+    spotify_auth_changed = pyqtSignal(bool)
+    lyrics_ready = pyqtSignal(list)
+    cover_color_ready = pyqtSignal(int, int, int)
+    cover_art_bytes = pyqtSignal(bytes)
+    # Phase 6 signals
+    home_sections_ready = pyqtSignal(str, list)
+    library_ready = pyqtSignal(str, list)
+    queue_changed = pyqtSignal(list, int)
+    settings_ready = pyqtSignal(dict)
     is_netease_authenticated = False
+    is_ytmusic_authenticated = False
+    is_spotify_authenticated = False
+    queue_tracks: list = []
+    queue_index: int = -1
 
     def toggle_play_pause(self): pass
     def seek(self, ms): pass
     def set_volume(self, v): pass
+    def toggle_shuffle(self): pass
+    def cycle_repeat_mode(self): pass
 
 
 @pytest.fixture(scope="session")

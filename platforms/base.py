@@ -20,3 +20,11 @@ class AbstractPlatform(ABC):
 
     @abstractmethod
     async def get_library_playlists(self) -> list[Playlist]: ...
+
+    async def get_home(self) -> list[tuple[str, list[Track]]]:
+        """Return home-page sections as [(section_title, tracks)]."""
+        return []
+
+    async def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
+        """Return tracks in the given playlist."""
+        return []

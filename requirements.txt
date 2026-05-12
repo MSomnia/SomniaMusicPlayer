@@ -9,6 +9,8 @@ colorthief>=0.2.1
 aiosqlite>=0.20.0
 pycryptodome>=3.20.0
 sounddevice>=0.4.7
+soundfile>=0.12.1
+librespot>=0.0.5
 Pillow>=10.3.0
 
 # Dev
