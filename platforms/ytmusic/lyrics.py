@@ -24,13 +24,11 @@ class LRCLibClient:
                 )
                 resp.raise_for_status()
                 results = resp.json()
+            for item in results:
+                synced = item.get("syncedLyrics")
+                if synced:
+                    return parse_lrc(synced)
         except Exception as exc:
             logger.debug("LRCLIB request failed: %s", exc)
-            return []
-
-        for item in results:
-            synced = item.get("syncedLyrics")
-            if synced:
-                return parse_lrc(synced)
 
         return []

@@ -73,7 +73,7 @@ class VLCBackend(QObject):
         if self._player is None:
             return
         ms = self._player.get_time()
-        if ms >= 0:
+        if isinstance(ms, int) and ms >= 0:
             self.position_changed.emit(ms)
 
     @pyqtSlot()

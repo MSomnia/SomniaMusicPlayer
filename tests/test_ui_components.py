@@ -13,7 +13,12 @@ class _MockCtrl(QObject):
     position_changed = pyqtSignal(int)
     search_results_ready = pyqtSignal(list)
     netease_auth_changed = pyqtSignal(bool)
+    ytmusic_auth_changed = pyqtSignal(bool)
+    lyrics_ready = pyqtSignal(list)
+    cover_color_ready = pyqtSignal(int, int, int)
+    cover_art_bytes = pyqtSignal(bytes)
     is_netease_authenticated = False
+    is_ytmusic_authenticated = False
 
     def toggle_play_pause(self): pass
     def seek(self, ms): pass

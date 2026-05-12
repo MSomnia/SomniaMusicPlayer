@@ -37,7 +37,7 @@ class AppController(QObject):
         self._netease_auth = NeteaseAuth(self._repo)
         self._ytm_auth = YTMusicAuth(self._repo)
         self._netease_client: NeteaseProxyClient | None = None
-        self._ytm_client = None   # YTMusicClient | None — avoid circular import at module level
+        self._ytm_client: "YTMusicClient | None" = None  # lazy import defers ytmusicapi/yt-dlp cost
         self._player = UnifiedPlayer()
         self._vlc = VLCBackend()
         self._queue = PlayQueue()
@@ -122,7 +122,7 @@ class AppController(QObject):
 
     # ── auth ──────────────────────────────────────────────────────────────────
 
-    async def ensure_netease_auth(self, parent=None) -> bool:
+    async def ensure_netease_auth(self, parent: "QWidget | None" = None) -> bool:
         if self._netease_client is not None:
             return True
         cookies = await self._netease_auth.login(parent)
@@ -132,7 +132,7 @@ class AppController(QObject):
             return True
         return False
 
-    async def ensure_ytmusic_auth(self, parent=None) -> bool:
+    async def ensure_ytmusic_auth(self, parent: "QWidget | None" = None) -> bool:
         if self._ytm_client is not None:
             return True
         headers = await self._ytm_auth.login(parent)

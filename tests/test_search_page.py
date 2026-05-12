@@ -16,13 +16,16 @@ class _MockCtrl(QObject):
     position_changed = pyqtSignal(int)
     search_results_ready = pyqtSignal(list)
     netease_auth_changed = pyqtSignal(bool)
+    ytmusic_auth_changed = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
         self.is_netease_authenticated = True
+        self.is_ytmusic_authenticated = False
         self.search = AsyncMock(return_value=[])
         self.play_track = AsyncMock()
         self.ensure_netease_auth = AsyncMock(return_value=True)
+        self.ensure_ytmusic_auth = AsyncMock(return_value=True)
 
 
 def _track(tid="1") -> Track:
@@ -73,7 +76,7 @@ async def test_do_search_calls_ctrl_search(qapp, qtbot):
     w = SearchPage(ctrl)
     qtbot.addWidget(w)
     await w._do_search("hello")
-    ctrl.search.assert_awaited_once_with("hello")
+    ctrl.search.assert_awaited_once_with("hello", platform="netease")
 
 
 async def test_do_search_skips_empty_query(qapp, qtbot):

@@ -22,7 +22,8 @@ class YTMusicClient(AbstractPlatform):
         self._ytm = YTMusic(auth=json.dumps(headers))
 
     async def is_authenticated(self) -> bool:
-        return True
+        # Client can only be constructed with headers; True as long as they exist
+        return bool(self._ytm)
 
     async def search(self, query: str, limit: int = 30) -> list[Track]:
         loop = asyncio.get_event_loop()
@@ -61,12 +62,16 @@ class YTMusicClient(AbstractPlatform):
         formats = info.get("formats", [])
         audio_only = [
             f for f in formats
-            if f.get("acodec") != "none" and f.get("vcodec") in ("none", None)
+            if f.get("acodec") not in (None, "none")
+            and f.get("vcodec") in ("none", None)
         ]
         if audio_only:
             best = max(audio_only, key=lambda f: f.get("abr") or 0)
             return best["url"]
-        return info["url"]
+        fallback = info.get("url")
+        if not fallback:
+            raise RuntimeError(f"No audio stream available for video {video_id!r}")
+        return fallback
 
     @staticmethod
     def _to_track(r: dict) -> Track:
