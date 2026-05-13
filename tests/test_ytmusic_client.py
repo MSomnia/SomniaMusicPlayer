@@ -1,6 +1,6 @@
 import json, pytest
 from unittest.mock import MagicMock, patch
-from core.models import Track
+from core.models import Track, Artist
 
 
 def _make_client():
@@ -89,3 +89,66 @@ async def test_get_library_playlists_includes_liked_songs():
     assert playlists[0].id == "LM"
     assert playlists[0].name == "喜欢的歌曲"
     assert playlists[0].track_count == 42
+
+
+ARTIST_SEARCH_RESULT = [
+    {
+        "browseId": "UCVnWg1HM4tKcBbFAFpGfqCg",
+        "artist": "Taylor Swift",
+        "thumbnails": [
+            {"url": "https://example.com/ts_small.jpg", "width": 100, "height": 100},
+            {"url": "https://example.com/ts_large.jpg", "width": 576, "height": 576},
+        ],
+        "resultType": "artist",
+    }
+]
+
+ARTIST_DATA = {
+    "name": "Taylor Swift",
+    "thumbnails": [
+        {"url": "https://example.com/ts_large.jpg", "width": 576, "height": 576},
+    ],
+    "songs": {
+        "results": [
+            {
+                "videoId": "abc123",
+                "title": "Anti-Hero",
+                "artists": [{"name": "Taylor Swift", "id": "UCVnWg1HM4tKcBbFAFpGfqCg"}],
+                "album": {"name": "Midnights", "id": "alb001"},
+                "thumbnails": [{"url": "https://example.com/midnights.jpg"}],
+                "duration_seconds": 200,
+            }
+        ]
+    },
+}
+
+
+async def test_ytmusic_search_artist():
+    client = _make_client()
+    with patch.object(client._ytm, "search", return_value=ARTIST_SEARCH_RESULT):
+        artist = await client.search_artist("Taylor Swift")
+
+    assert artist is not None
+    assert isinstance(artist, Artist)
+    assert artist.id == "UCVnWg1HM4tKcBbFAFpGfqCg"
+    assert artist.name == "Taylor Swift"
+    assert artist.image_url == "https://example.com/ts_large.jpg"
+    assert artist.platform == "ytmusic"
+
+
+async def test_ytmusic_search_artist_returns_none_on_empty():
+    client = _make_client()
+    with patch.object(client._ytm, "search", return_value=[]):
+        artist = await client.search_artist("nonexistent_xyz")
+
+    assert artist is None
+
+
+async def test_ytmusic_get_artist_top_tracks():
+    client = _make_client()
+    with patch.object(client._ytm, "get_artist", return_value=ARTIST_DATA):
+        tracks = await client.get_artist_top_tracks("UCVnWg1HM4tKcBbFAFpGfqCg")
+
+    assert len(tracks) == 1
+    assert tracks[0].title == "Anti-Hero"
+    assert tracks[0].platform == "ytmusic"

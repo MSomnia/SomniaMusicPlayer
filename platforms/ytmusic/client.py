@@ -162,6 +162,49 @@ class YTMusicClient(AbstractPlatform):
         raw = (data or {}).get("tracks", [])
         return [self._to_track(t) for t in raw if t.get("videoId")]
 
+    async def search_artist(self, name: str) -> "Artist | None":
+        from core.models import Artist
+        loop = asyncio.get_event_loop()
+        try:
+            results = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: self._ytm.search(name, filter="artists", limit=1),
+                ),
+                timeout=10.0,
+            )
+        except Exception as exc:
+            logger.warning("YTMusic search_artist failed: %s", exc)
+            return None
+        if not results:
+            return None
+        a = results[0]
+        thumbs = a.get("thumbnails") or []
+        image_url = thumbs[-1]["url"] if thumbs else ""
+        artist_name = a.get("artist") or a.get("name") or name
+        browse_id = a.get("browseId", "")
+        return Artist(
+            id=browse_id,
+            platform="ytmusic",
+            name=artist_name,
+            image_url=image_url,
+        )
+
+    async def get_artist_top_tracks(self, artist_id: str, limit: int = 30) -> list[Track]:
+        loop = asyncio.get_event_loop()
+        try:
+            data = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor, lambda: self._ytm.get_artist(artist_id)
+                ),
+                timeout=12.0,
+            )
+        except Exception as exc:
+            logger.warning("YTMusic get_artist_top_tracks failed: %s", exc)
+            return []
+        songs = (data or {}).get("songs", {}).get("results", [])
+        return [self._to_track(s) for s in songs[:limit] if s.get("videoId")]
+
     async def get_recommendations(self, track: Track) -> list[Track]:
         if not track.id:
             return []
