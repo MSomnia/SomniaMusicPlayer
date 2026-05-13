@@ -16,7 +16,8 @@ def paint_frosted_panel(widget: QWidget, painter: QPainter, radius: int = 8) -> 
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setClipPath(path)
 
-    root = widget.window().centralWidget() if widget.window() else None
+    win = widget.window()
+    root = win.centralWidget() if win and hasattr(win, "centralWidget") else None
     background = _root_background(root)
     if background.isNull() or root is None:
         painter.fillPath(path, QColor(COLORS["bg_panel"]))

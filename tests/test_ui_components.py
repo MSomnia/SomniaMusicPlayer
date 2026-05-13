@@ -63,12 +63,9 @@ class _MockCtrl(QObject):
 def test_sidebar_standby_signal(qapp_instance, qtbot):
     w = SidebarWidget()
     qtbot.addWidget(w)
-    received: list[int] = []
-    w.standby_requested.connect(lambda: received.append(1))
-    w._title.mousePressEvent(
-        type("E", (), {"button": lambda self: Qt.MouseButton.LeftButton})()
-    )
-    assert received == [1]
+    w.show()
+    with qtbot.waitSignal(w.standby_requested, timeout=500):
+        qtbot.mousePress(w._title, Qt.MouseButton.LeftButton)
 
 
 @pytest.fixture(scope="session")

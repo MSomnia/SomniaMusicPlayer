@@ -19,10 +19,7 @@ class _ClickableLabel(QLabel):
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
-        try:
-            super().mousePressEvent(event)
-        except TypeError:
-            pass
+        super().mousePressEvent(event)
 
 
 class SidebarWidget(QWidget):
