@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import httpx
-from core.models import Track, Playlist, Album, LyricLine
+from core.models import Track, Playlist, Album, LyricLine, Artist
 from platforms.base import AbstractPlatform
 from utils.lrc_parser import parse_lrc
 
@@ -148,6 +148,47 @@ class NeteaseProxyClient(AbstractPlatform):
             logger.warning("Netease get_album_tracks failed: %s", exc)
             return []
         return [self._song_to_track(s) for s in data.get("songs", [])]
+
+    async def search_artist(self, name: str) -> "Artist | None":
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{self._base}/cloudsearch",
+                    params={"keywords": name, "type": 100, "limit": 1,
+                            "cookie": self._cookie_str()},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Netease proxy search_artist failed: %s", exc)
+            return None
+        artists = data.get("result", {}).get("artists", [])
+        if not artists:
+            return None
+        a = artists[0]
+        return Artist(
+            id=str(a["id"]),
+            platform="netease",
+            name=a.get("name", ""),
+            image_url=a.get("picUrl", ""),
+        )
+
+    async def get_artist_top_tracks(self, artist_id: str, limit: int = 30) -> list[Track]:
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{self._base}/artists",
+                    params={"id": artist_id, "cookie": self._cookie_str()},
+                    timeout=12.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Netease proxy get_artist_top_tracks failed: %s", exc)
+            return []
+        songs = data.get("hotSongs", [])
+        return [self._song_to_track(s) for s in songs[:limit]]
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         try:

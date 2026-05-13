@@ -407,36 +407,77 @@ class SpotifyClient(AbstractPlatform):
 
     async def search_artist(self, name: str) -> "Artist | None":
         from core.models import Artist
+        if time.time() < self._rate_limited_until:
+            logger.warning("Spotify search_artist: rate limited, skipping")
+            return None
         try:
             token = await self._auth.get_access_token()
             async with httpx.AsyncClient() as http:
-                resp = await http.get(
-                    f"{_WEB_API_URL}/search",
-                    params={"q": name, "type": "artist", "limit": 1},
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/json",
-                        "User-Agent": _WEB_UA,
-                        **_APP_HEADERS,
+                client_token = await self._get_client_token(http)
+                resp = await http.post(
+                    _PARTNER_URL,
+                    json={
+                        "variables": {
+                            "query": name,
+                            "limit": 10,
+                            "numberOfTopResults": 10,
+                            "offset": 0,
+                            "includeAuthors": False,
+                            "includeAlbumPreReleases": False,
+                            "includeEpisodeContentRatingsV2": False,
+                        },
+                        "operationName": "searchSuggestions",
+                        "extensions": {
+                            "persistedQuery": {
+                                "version": 1,
+                                "sha256Hash": _SEARCH_SUGGESTIONS_HASH,
+                            }
+                        },
                     },
+                    headers=self._partner_headers(token, client_token),
                     timeout=10.0,
                 )
+                if resp.status_code == 429:
+                    self._rate_limited_until = time.time() + _retry_after_seconds(resp)
+                    return None
                 resp.raise_for_status()
-                items = resp.json().get("artists", {}).get("items", [])
+                return self._parse_artist_from_suggestions(resp.json(), name)
         except Exception as exc:
             logger.warning("Spotify search_artist failed: %s", exc)
             return None
-        if not items:
-            return None
-        a = items[0]
-        images = a.get("images") or []
-        image_url = images[0].get("url", "") if images else ""
-        return Artist(
-            id=a.get("id", ""),
-            platform="spotify",
-            name=a.get("name", ""),
-            image_url=image_url,
+
+    @staticmethod
+    def _parse_artist_from_suggestions(data: dict, fallback_name: str) -> "Artist | None":
+        from core.models import Artist
+        raw_items = (
+            data.get("data", {})
+            .get("searchV2", {})
+            .get("topResultsV2", {})
+            .get("itemsV2", [])
         )
+        for raw in raw_items:
+            wrapper = raw.get("item") or raw
+            if wrapper.get("__typename") != "ArtistResponseWrapper":
+                continue
+            d = wrapper.get("data") or {}
+            uri = d.get("uri", "")
+            artist_id = d.get("id") or (uri.rsplit(":", 1)[-1] if uri else "")
+            if not artist_id:
+                continue
+            artist_name = (d.get("profile") or {}).get("name", "") or fallback_name
+            sources = (
+                (d.get("visuals") or {})
+                .get("avatarImage", {})
+                .get("sources", [])
+            ) or []
+            image_url = sources[0].get("url", "") if sources else ""
+            return Artist(
+                id=artist_id,
+                platform="spotify",
+                name=artist_name,
+                image_url=image_url,
+            )
+        return None
 
     async def get_artist_top_tracks(self, artist_id: str, limit: int = 30) -> list[Track]:
         try:

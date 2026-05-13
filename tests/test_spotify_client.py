@@ -336,14 +336,31 @@ def test_to_playlist():
 
 
 ARTIST_SEARCH_RESPONSE = {
-    "artists": {
-        "items": [
-            {
-                "id": "3TVXtAsR1Inumwj472S9r4",
-                "name": "Drake",
-                "images": [{"url": "https://example.com/drake.jpg", "height": 640, "width": 640}],
+    "data": {
+        "searchV2": {
+            "topResultsV2": {
+                "itemsV2": [
+                    {
+                        "item": {
+                            "__typename": "ArtistResponseWrapper",
+                            "data": {
+                                "id": "3TVXtAsR1Inumwj472S9r4",
+                                "uri": "spotify:artist:3TVXtAsR1Inumwj472S9r4",
+                                "profile": {"name": "Drake"},
+                                "visuals": {
+                                    "avatarImage": {
+                                        "sources": [
+                                            {"url": "https://example.com/drake.jpg",
+                                             "width": 640, "height": 640}
+                                        ]
+                                    }
+                                },
+                            },
+                        }
+                    }
+                ]
             }
-        ]
+        }
     }
 }
 
@@ -363,12 +380,13 @@ ARTIST_TOP_TRACKS_RESPONSE = {
 
 async def test_spotify_search_artist():
     client, _ = _make_client()
+    client._client_token = "client_token"
     mock_resp = MagicMock()
     mock_resp.json.return_value = ARTIST_SEARCH_RESPONSE
     mock_resp.raise_for_status = MagicMock()
     mock_resp.status_code = 200
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_resp)):
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)):
         artist = await client.search_artist("Drake")
 
     assert artist is not None
@@ -381,12 +399,13 @@ async def test_spotify_search_artist():
 
 async def test_spotify_search_artist_returns_none_on_empty():
     client, _ = _make_client()
+    client._client_token = "client_token"
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"artists": {"items": []}}
+    mock_resp.json.return_value = {"data": {"searchV2": {"topResultsV2": {"itemsV2": []}}}}
     mock_resp.raise_for_status = MagicMock()
     mock_resp.status_code = 200
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_resp)):
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)):
         artist = await client.search_artist("nonexistent_xyz")
 
     assert artist is None
