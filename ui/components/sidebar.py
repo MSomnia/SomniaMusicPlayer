@@ -4,14 +4,31 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter
+from PyQt6.QtGui import QPainter, QCursor
 from ui.frosted import paint_frosted_panel
 from ui.theme import COLORS, FONTS
+
+
+class _ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        try:
+            super().mousePressEvent(event)
+        except TypeError:
+            pass
 
 
 class SidebarWidget(QWidget):
     nav_changed = pyqtSignal(str)               # "home"|"search"|"library"|"settings"
     platform_login_requested = pyqtSignal(str)  # "netease"|"spotify"|"ytmusic"
+    standby_requested = pyqtSignal()            # emitted when title label is clicked
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -30,9 +47,10 @@ class SidebarWidget(QWidget):
         layout.setContentsMargins(0, 16, 0, 0)
         layout.setSpacing(2)
 
-        self._title = QLabel()
+        self._title = _ClickableLabel()
         self._title.setObjectName("appName")
         self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title.clicked.connect(self.standby_requested)
         layout.addWidget(self._title)
         self._refresh_title()
         layout.addSpacing(16)

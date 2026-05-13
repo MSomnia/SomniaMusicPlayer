@@ -7,7 +7,7 @@ from ui.app_window import MainWindow
 from core.models import PlayerState
 from ui.theme import COLORS
 from unittest.mock import MagicMock
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, Qt
 
 
 class _MockCtrl(QObject):
@@ -58,6 +58,17 @@ class _MockCtrl(QObject):
     async def ensure_netease_auth(self, parent=None): return False
     async def ensure_ytmusic_auth(self, parent=None): return False
     async def ensure_spotify_auth(self, parent=None): return False
+
+
+def test_sidebar_standby_signal(qapp_instance, qtbot):
+    w = SidebarWidget()
+    qtbot.addWidget(w)
+    received: list[int] = []
+    w.standby_requested.connect(lambda: received.append(1))
+    w._title.mousePressEvent(
+        type("E", (), {"button": lambda self: Qt.MouseButton.LeftButton})()
+    )
+    assert received == [1]
 
 
 @pytest.fixture(scope="session")
