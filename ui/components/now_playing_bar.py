@@ -1,6 +1,7 @@
 from __future__ import annotations
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSlider,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
@@ -36,7 +37,13 @@ class NowPlayingBar(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("nowPlayingBar")
         self.setFixedHeight(90)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._duration_ms: int = 0
         self._setup_ui()
         self._apply_styles()
@@ -53,6 +60,7 @@ class NowPlayingBar(QWidget):
 
     def _build_left(self) -> QWidget:
         widget = QWidget()
+        widget.setObjectName("nowPlayingSection")
         widget.setFixedWidth(200)   # matches sidebar width
         hl = QHBoxLayout(widget)
         hl.setSpacing(12)
@@ -84,6 +92,7 @@ class NowPlayingBar(QWidget):
 
     def _build_center(self) -> QWidget:
         widget = QWidget()
+        widget.setObjectName("nowPlayingSection")
         vl = QVBoxLayout(widget)
         vl.setContentsMargins(0, 8, 0, 8)
         vl.setSpacing(6)
@@ -147,6 +156,7 @@ class NowPlayingBar(QWidget):
 
     def _build_right(self) -> QWidget:
         widget = QWidget()
+        widget.setObjectName("nowPlayingSection")
         widget.setMinimumWidth(150)
         hl = QHBoxLayout(widget)
         hl.setContentsMargins(8, 0, 0, 0)
@@ -192,9 +202,16 @@ class NowPlayingBar(QWidget):
     def _apply_styles(self) -> None:
         c, f = COLORS, FONTS
         self.setStyleSheet(f"""
-            NowPlayingBar {{
-                background-color: {c['bg_surface']};
+            #nowPlayingBar {{
+                background-color: #000000;
                 border-top: 1px solid {c['border']};
+            }}
+            #nowPlayingSection {{
+                background-color: #000000;
+            }}
+            #nowPlayingBar QLabel,
+            #nowPlayingBar QSlider {{
+                background: transparent;
             }}
             #coverThumb {{
                 background-color: {c['bg_elevated']};
@@ -221,16 +238,15 @@ class NowPlayingBar(QWidget):
                 font-size: {f['size_xs']}px;
                 font-weight: bold;
             }}
-            #controlBtn {{
+            #controlBtn, #lyricsBtn {{
                 background: transparent;
                 border: none;
                 color: {c['text_secondary']};
                 font-size: 15px;
                 padding: 4px 8px;
             }}
-            #controlBtn:hover {{ color: {c['text_primary']}; }}
-            #controlBtn:checked {{ color: {c['accent']}; }}
-            #lyricsBtn:checked {{ color: {c['accent']}; }}
+            #controlBtn:hover, #lyricsBtn:hover {{ color: {c['text_primary']}; }}
+            #controlBtn:checked, #lyricsBtn:checked {{ color: {c['accent']}; }}
             #playBtn {{
                 background-color: {c['accent']};
                 border: none;

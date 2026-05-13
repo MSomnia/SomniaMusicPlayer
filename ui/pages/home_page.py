@@ -68,7 +68,9 @@ class HomePage(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setObjectName("homeScroll")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setStyleSheet("background: transparent;")
         self._content_widget = QWidget()
+        self._content_widget.setObjectName("homeContent")
         self._content_layout = QVBoxLayout(self._content_widget)
         self._content_layout.setContentsMargins(0, 0, 0, 0)
         self._content_layout.setSpacing(16)
@@ -131,20 +133,22 @@ class HomePage(QWidget):
                 padding: 4px 0;
             }}
             #trackList {{
-                background-color: {c['bg_base']};
+                background-color: transparent;
                 border: none;
                 color: {c['text_primary']};
                 font-size: {f['size_sm']}px;
             }}
             #trackList::item {{
-                padding: 8px 12px;
-                border-bottom: 1px solid {c['divider']};
+                padding: 2px 4px;
+                border-radius: 8px;
             }}
             #trackList::item:hover {{
                 background-color: {c['bg_hover']};
+                border-radius: 8px;
             }}
             #trackList::item:selected {{
                 background-color: {c['bg_elevated']};
+                border-radius: 8px;
             }}
             #sectionToggleBtn {{
                 background-color: transparent;
@@ -158,8 +162,9 @@ class HomePage(QWidget):
                 border-color: {c['text_secondary']};
                 color: {c['text_primary']};
             }}
-            #homeScroll {{
-                background-color: {c['bg_base']};
+            #homeScroll,
+            #homeContent {{
+                background-color: transparent;
             }}
             {scrollbar_qss()}
         """)

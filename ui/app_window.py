@@ -9,7 +9,9 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel,
 )
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPainter, QPixmap
 from ui.theme import COLORS, FONTS
+from ui.frosted import paint_frosted_panel
 from ui.components.sidebar import SidebarWidget
 from ui.components.now_playing_bar import NowPlayingBar
 from ui.components.lyrics_view import LyricsView
@@ -57,6 +59,54 @@ class _ErrorToast(QLabel):
         if self.isVisible():
             p = self.parent()
             self.move((p.width() - self.width()) // 2, 20)
+
+
+class _AppRoot(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("appRoot")
+        self.setAutoFillBackground(False)
+        self._background_path = ""
+        self._background_pixmap = QPixmap()
+
+    def set_background_image(self, path: str) -> None:
+        path = path.strip()
+        self._background_path = path
+        self._background_pixmap = QPixmap(path) if path else QPixmap()
+        self.update()
+        for child in self.findChildren(QWidget):
+            child.update()
+
+    def background_pixmap(self) -> QPixmap:
+        return self._background_pixmap
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), Qt.GlobalColor.black)
+        if self._background_pixmap.isNull():
+            return
+
+        source = self._background_pixmap
+        scaled = source.scaled(
+            self.size(),
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = (self.width() - scaled.width()) // 2
+        y = (self.height() - scaled.height()) // 2
+        painter.drawPixmap(x, y, scaled)
+
+
+class _FrostedStackedWidget(QStackedWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("contentArea")
+        self.setAutoFillBackground(False)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        paint_frosted_panel(self, painter)
+        super().paintEvent(event)
 
 
 def _apply_dark_titlebar(win_id: int) -> None:
@@ -136,7 +186,8 @@ class MainWindow(QMainWindow):
             _apply_dark_titlebar(int(self.winId()))
 
     def _setup_ui(self) -> None:
-        central = QWidget()
+        central = _AppRoot()
+        self._app_root = central
         self.setCentralWidget(central)
 
         root = QVBoxLayout(central)
@@ -144,16 +195,15 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
 
         body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(0)
+        body.setContentsMargins(12, 12, 12, 12)
+        body.setSpacing(12)
 
         self.sidebar = SidebarWidget()
         self.sidebar.nav_changed.connect(self._on_nav)
         self.sidebar.platform_login_requested.connect(self._on_platform_login)
         body.addWidget(self.sidebar)
 
-        self.content = QStackedWidget()
-        self.content.setObjectName("contentArea")
+        self.content = _FrostedStackedWidget()
 
         self._home_page = HomePage(self._ctrl)
         self._search_page = SearchPage(self._ctrl)
@@ -202,6 +252,8 @@ class MainWindow(QMainWindow):
         ctrl.spotify_auth_changed.connect(
             lambda ok: self.sidebar.set_platform_status("spotify", ok)
         )
+        ctrl.profile_changed.connect(self.sidebar.set_display_name)
+        ctrl.background_changed.connect(self._app_root.set_background_image)
 
         # Lyrics & cover
         ctrl.lyrics_ready.connect(self._lyrics_view.set_lyrics)
@@ -213,6 +265,10 @@ class MainWindow(QMainWindow):
         self.sidebar.set_platform_status("netease", ctrl.is_netease_authenticated)
         self.sidebar.set_platform_status("ytmusic", ctrl.is_ytmusic_authenticated)
         self.sidebar.set_platform_status("spotify", ctrl.is_spotify_authenticated)
+        self.sidebar.set_display_name(getattr(ctrl, "display_name", "Somnia"))
+        self._app_root.set_background_image(
+            getattr(ctrl, "background_image_path", "")
+        )
 
         # Playback controls
         self.now_playing.play_pause_clicked.connect(ctrl.toggle_play_pause)
@@ -318,11 +374,15 @@ class MainWindow(QMainWindow):
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(f"""
-            QMainWindow, QWidget {{
-                background-color: {COLORS['bg_base']};
+            QMainWindow, #appRoot {{
+                background-color: #000000;
+            }}
+            QWidget {{
                 font-family: "Inter", "SF Pro Display", sans-serif;
             }}
             #contentArea {{
-                background-color: {COLORS['bg_base']};
+                background-color: transparent;
+                border-radius: 8px;
+                border: none;
             }}
         """)

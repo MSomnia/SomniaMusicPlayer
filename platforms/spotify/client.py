@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import httpx
 
-from core.models import LyricLine, Playlist, Track
+from core.models import Album, LyricLine, Playlist, Track
 from platforms.base import AbstractPlatform
 
 logger = logging.getLogger(__name__)
@@ -255,6 +255,155 @@ class SpotifyClient(AbstractPlatform):
         if client_token:
             h["client-token"] = client_token
         return h
+
+    async def search_albums(self, query: str, limit: int = 5) -> list[Album]:
+        """Search albums via the partner API (same endpoint as track search).
+
+        Avoids the rate-limited /v1/search Web API by reusing the
+        searchSuggestions persisted query and filtering AlbumResponseWrapper
+        items from the mixed topResultsV2 response.
+        """
+        query = query.strip()
+        if not query:
+            return []
+        if time.time() < self._rate_limited_until:
+            return []
+        try:
+            token = await self._auth.get_access_token()
+        except Exception as exc:
+            logger.warning("Spotify auth error during album search: %s", exc)
+            return []
+        try:
+            async with httpx.AsyncClient() as http:
+                client_token = await self._get_client_token(http)
+                # Over-fetch since albums are a subset of mixed results
+                fetch_limit = min(limit * 4, 30)
+                resp = await http.post(
+                    _PARTNER_URL,
+                    json={
+                        "variables": {
+                            "query": query,
+                            "limit": fetch_limit,
+                            "numberOfTopResults": fetch_limit,
+                            "offset": 0,
+                            "includeAuthors": False,
+                            "includeAlbumPreReleases": False,
+                            "includeEpisodeContentRatingsV2": False,
+                        },
+                        "operationName": "searchSuggestions",
+                        "extensions": {
+                            "persistedQuery": {
+                                "version": 1,
+                                "sha256Hash": _SEARCH_SUGGESTIONS_HASH,
+                            }
+                        },
+                    },
+                    headers=self._partner_headers(token, client_token),
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                return self._parse_albums_from_suggestions(resp.json())[:limit]
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                self._rate_limited_until = time.time() + _retry_after_seconds(exc.response)
+            logger.warning("Spotify search_albums failed: %s", exc)
+            return []
+        except Exception as exc:
+            logger.warning("Spotify search_albums failed: %s", exc)
+            return []
+
+    async def get_album_tracks(self, album_id: str) -> list[Track]:
+        try:
+            token = await self._auth.get_access_token()
+            async with httpx.AsyncClient() as http:
+                client_token = await self._get_client_token(http)
+                album_uri = f"spotify:album:{album_id}"
+
+                # ── 1. Partner API: album-specific operations ─────────────
+                for op_name in ("getAlbum", "queryAlbumTracks", "queryAlbum"):
+                    op_hash = await self._get_partner_hash(http, op_name)
+                    if not op_hash:
+                        continue
+                    try:
+                        resp = await http.post(
+                            _PARTNER_URL,
+                            json={
+                                "variables": {
+                                    "uri": album_uri,
+                                    "locale": "",
+                                    "offset": 0,
+                                    "limit": 50,
+                                },
+                                "operationName": op_name,
+                                "extensions": {
+                                    "persistedQuery": {
+                                        "version": 1,
+                                        "sha256Hash": op_hash,
+                                    }
+                                },
+                            },
+                            headers=self._partner_headers(token, client_token),
+                            timeout=12.0,
+                        )
+                        if resp.status_code == 200:
+                            tracks = self._parse_album_tracks_partner(resp.json())
+                            if tracks:
+                                return tracks
+                    except Exception:
+                        continue
+
+                # ── 2. Partner API: fetchPlaylist with album URI ───────────
+                pl_hash = await self._get_partner_hash(http, "fetchPlaylist")
+                if pl_hash:
+                    try:
+                        resp = await http.post(
+                            _PARTNER_URL,
+                            json={
+                                "variables": {
+                                    "uri": album_uri,
+                                    "offset": 0,
+                                    "limit": 50,
+                                    "enableWatchFeedEntrypoint": False,
+                                },
+                                "operationName": "fetchPlaylist",
+                                "extensions": {
+                                    "persistedQuery": {
+                                        "version": 1,
+                                        "sha256Hash": pl_hash,
+                                    }
+                                },
+                            },
+                            headers=self._partner_headers(token, client_token),
+                            timeout=12.0,
+                        )
+                        if resp.status_code == 200:
+                            tracks = self._parse_fetch_playlist(resp.json())
+                            if tracks:
+                                return tracks
+                    except Exception:
+                        pass
+
+                # ── 3. Web API fallback (rate-limit-aware) ────────────────
+                if time.time() < self._rate_limited_until:
+                    logger.debug("Spotify album tracks: rate limited, skipping Web API")
+                    return []
+                resp = await http.get(
+                    f"{_WEB_API_URL}/albums/{album_id}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "User-Agent": _WEB_UA,
+                        **_APP_HEADERS,
+                    },
+                    timeout=12.0,
+                )
+                if resp.status_code == 429:
+                    self._rate_limited_until = time.time() + _retry_after_seconds(resp)
+                    return []
+                resp.raise_for_status()
+                return self._parse_web_api_album(resp.json())
+        except Exception as exc:
+            logger.warning("Spotify get_album_tracks failed: %s", exc)
+            return []
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         try:
@@ -599,6 +748,127 @@ class SpotifyClient(AbstractPlatform):
     def _parse_webapi_search(data: dict) -> list[Track]:
         items = (data.get("tracks") or {}).get("items") or []
         return [SpotifyClient._to_webapi_track(item) for item in items if item]
+
+    @staticmethod
+    def _parse_albums_from_suggestions(data: dict) -> list[Album]:
+        """Extract AlbumResponseWrapper items from a searchSuggestions response."""
+        raw_items = (
+            data.get("data", {})
+            .get("searchV2", {})
+            .get("topResultsV2", {})
+            .get("itemsV2", [])
+        )
+        albums: list[Album] = []
+        for raw in raw_items:
+            wrapper = raw.get("item") or raw
+            if wrapper.get("__typename") != "AlbumResponseWrapper":
+                continue
+            d = wrapper.get("data") or {}
+            uri = d.get("uri", "")
+            album_id = d.get("id") or (uri.rsplit(":", 1)[-1] if uri else "")
+            name = d.get("name", "")
+            if not album_id or not name:
+                continue
+            artists_raw = d.get("artists") or {}
+            artist_items = (
+                artists_raw.get("items", []) if isinstance(artists_raw, dict) else []
+            )
+            artists = [
+                (a.get("profile") or a).get("name", "") for a in artist_items
+            ]
+            artists = [a for a in artists if a]
+            sources = (d.get("coverArt") or {}).get("sources") or []
+            cover = sources[0].get("url", "") if sources else ""
+            date_obj = d.get("date") or {}
+            year = str(date_obj.get("year", "")) if isinstance(date_obj, dict) else ""
+            tracks_obj = d.get("tracks") or {}
+            track_count = (
+                tracks_obj.get("totalCount", 0) if isinstance(tracks_obj, dict) else 0
+            )
+            albums.append(Album(
+                id=album_id,
+                platform="spotify",
+                name=name,
+                artist=artists[0] if artists else "",
+                cover_url=cover,
+                track_count=track_count,
+                year=year,
+            ))
+        return albums
+
+    @staticmethod
+    def _parse_album_tracks_partner(data: dict) -> list[Track]:
+        """Parse the partner API getAlbum / queryAlbumTracks response."""
+        album_node = (
+            data.get("data", {}).get("albumUnion")
+            or data.get("data", {}).get("album")
+            or {}
+        )
+        sources = (album_node.get("coverArt") or {}).get("sources") or []
+        cover = sources[0].get("url", "") if sources else ""
+        album_name = album_node.get("name", "")
+        tracks_obj = (
+            album_node.get("tracks")
+            or album_node.get("tracksV2")
+            or {}
+        )
+        items = tracks_obj.get("items", [])
+        tracks: list[Track] = []
+        for item in items:
+            td = item.get("track") or item or {}
+            if not isinstance(td, dict):
+                continue
+            uid = td.get("id", "")
+            uri = td.get("uri", "")
+            if not uid and "spotify:track:" in uri:
+                uid = uri.rsplit(":", 1)[-1]
+            if not uid:
+                continue
+            artists_raw = td.get("artists") or {}
+            artist_items = (
+                artists_raw.get("items", [])
+                if isinstance(artists_raw, dict) else []
+            )
+            artists = [
+                (a.get("profile") or a).get("name", "") for a in artist_items
+            ]
+            artists = [a for a in artists if a]
+            dur = td.get("duration") or td.get("trackDuration") or {}
+            tracks.append(Track(
+                id=uid,
+                platform="spotify",
+                title=td.get("name", ""),
+                artist=artists[0] if artists else "",
+                artists=artists,
+                album=album_name,
+                album_cover_url=cover,
+                duration_ms=dur.get("totalMilliseconds", 0) if isinstance(dur, dict) else 0,
+            ))
+        return tracks
+
+    @staticmethod
+    def _parse_web_api_album(data: dict) -> list[Track]:
+        """Parse GET /v1/albums/{id} response."""
+        images = data.get("images") or []
+        cover = images[0]["url"] if images else ""
+        album_name = data.get("name", "")
+        tracks: list[Track] = []
+        for item in (data.get("tracks") or {}).get("items", []):
+            if not item.get("id"):
+                continue
+            artists = [a.get("name", "") for a in item.get("artists", []) if a.get("name")]
+            tracks.append(Track(
+                id=item["id"],
+                platform="spotify",
+                title=item.get("name", ""),
+                artist=artists[0] if artists else "",
+                artists=artists,
+                album=album_name,
+                album_cover_url=cover,
+                duration_ms=item.get("duration_ms", 0),
+                is_explicit=bool(item.get("explicit", False)),
+            ))
+        return tracks
 
     @staticmethod
     def _parse_search_suggestions(data: dict) -> list[Track]:

@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem,
 )
 from PyQt6.QtCore import Qt, QSize
+from ui.components.track_row import fetch_cover, COVER_SIZE, COVER_RADIUS
 from ui.theme import COLORS, FONTS, scrollbar_qss
 
 _W = 380
@@ -19,7 +20,7 @@ _ROW_H    = 38
 
 
 class _QueueRow(QWidget):
-    """Single-row widget for the queue list: title | artist | duration."""
+    """Single-row widget for the queue list: [cover] title | artist | duration."""
 
     def __init__(self, track, is_current: bool, parent=None) -> None:
         super().__init__(parent)
@@ -30,6 +31,13 @@ class _QueueRow(QWidget):
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(6)
 
+        # ── Cover thumbnail ───────────────────────────────────────────────────
+        self._cover_lbl = QLabel()
+        self._cover_lbl.setFixedSize(COVER_SIZE, COVER_SIZE)
+        self._cover_lbl.setObjectName("queueCover")
+        layout.addWidget(self._cover_lbl)
+
+        # ── Title ─────────────────────────────────────────────────────────────
         prefix = "▶  " if is_current else ""
         title_lbl = QLabel(prefix + track.title)
         title_lbl.setObjectName("queueColTitle")
@@ -39,11 +47,13 @@ class _QueueRow(QWidget):
             )
         layout.addWidget(title_lbl, stretch=1)
 
+        # ── Artist ────────────────────────────────────────────────────────────
         artist_lbl = QLabel(track.artist)
         artist_lbl.setObjectName("queueColArtist")
         artist_lbl.setFixedWidth(_ARTIST_W)
         layout.addWidget(artist_lbl)
 
+        # ── Duration ──────────────────────────────────────────────────────────
         s = track.duration_ms // 1000
         dur_lbl = QLabel(f"{s // 60}:{s % 60:02d}" if s else "")
         dur_lbl.setObjectName("queueColDuration")
@@ -53,6 +63,10 @@ class _QueueRow(QWidget):
 
         self.setStyleSheet(f"""
             _QueueRow {{ background: transparent; }}
+            #queueCover {{
+                background-color: {c['bg_elevated']};
+                border-radius: {COVER_RADIUS}px;
+            }}
             #queueColTitle {{
                 color: {c['text_primary']};
                 font-size: {f['size_sm']}px;
@@ -69,6 +83,17 @@ class _QueueRow(QWidget):
                 background: transparent;
             }}
         """)
+
+        if track.album_cover_url:
+            asyncio.ensure_future(self._load_cover(track.album_cover_url))
+
+    async def _load_cover(self, url: str) -> None:
+        pixmap = await fetch_cover(url, COVER_SIZE)
+        if pixmap:
+            try:
+                self._cover_lbl.setPixmap(pixmap)
+            except RuntimeError:
+                pass
 
 
 class QueuePanel(QWidget):
@@ -147,14 +172,16 @@ class QueuePanel(QWidget):
                 font-size: {f['size_sm']}px;
             }}
             #queueList::item {{
-                padding: 8px 12px;
-                border-bottom: 1px solid {c['divider']};
+                padding: 2px 4px;
+                border-radius: 6px;
             }}
             #queueList::item:hover {{
                 background-color: {c['bg_hover']};
+                border-radius: 6px;
             }}
             #queueList::item:selected {{
                 background-color: {c['bg_elevated']};
+                border-radius: 6px;
             }}
             #clearBtn {{
                 background: transparent;

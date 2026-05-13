@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QCheckBox, QFrame, QPushButton,
+    QCheckBox, QFrame, QPushButton, QLineEdit, QFileDialog,
 )
 from PyQt6.QtCore import Qt
 from ui.theme import COLORS, FONTS
@@ -31,6 +31,8 @@ class SettingsPage(QWidget):
         ctrl.spotify_auth_changed.connect(
             lambda ok: self._on_auth_changed("spotify", ok)
         )
+        ctrl.profile_changed.connect(self._on_profile_changed)
+        ctrl.background_changed.connect(self._on_background_changed)
 
     # ── construction ──────────────────────────────────────────────────────────
 
@@ -42,6 +44,27 @@ class SettingsPage(QWidget):
         title = QLabel("设置")
         title.setObjectName("pageTitle")
         layout.addWidget(title)
+        layout.addSpacing(24)
+
+        # ── Profile section ──────────────────────────────────────────────────
+        layout.addWidget(self._section_label("个人"))
+        layout.addWidget(self._make_divider())
+        layout.addSpacing(12)
+
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(self._setting_label("昵称"))
+        self._display_name_input = QLineEdit()
+        self._display_name_input.setObjectName("displayNameInput")
+        self._display_name_input.setPlaceholderText("Somnia")
+        self._display_name_input.setMaxLength(24)
+        self._display_name_input.returnPressed.connect(self._save_display_name)
+        profile_row.addWidget(self._display_name_input)
+
+        self._display_name_btn = QPushButton("保存")
+        self._display_name_btn.setObjectName("displayNameBtn")
+        self._display_name_btn.clicked.connect(self._save_display_name)
+        profile_row.addWidget(self._display_name_btn)
+        layout.addLayout(profile_row)
         layout.addSpacing(24)
 
         # ── Accounts section ─────────────────────────────────────────────────
@@ -82,6 +105,27 @@ class SettingsPage(QWidget):
         # ── Display section ──────────────────────────────────────────────────
         layout.addWidget(self._section_label("显示"))
         layout.addWidget(self._make_divider())
+        layout.addSpacing(12)
+
+        # App background image
+        bg_row = QHBoxLayout()
+        bg_row.addWidget(self._setting_label("背景图"))
+        self._background_image_input = QLineEdit()
+        self._background_image_input.setObjectName("backgroundImageInput")
+        self._background_image_input.setPlaceholderText("未选择")
+        self._background_image_input.setReadOnly(True)
+        bg_row.addWidget(self._background_image_input)
+
+        self._background_browse_btn = QPushButton("浏览")
+        self._background_browse_btn.setObjectName("backgroundBrowseBtn")
+        self._background_browse_btn.clicked.connect(self._choose_background_image)
+        bg_row.addWidget(self._background_browse_btn)
+
+        self._background_clear_btn = QPushButton("清除")
+        self._background_clear_btn.setObjectName("backgroundClearBtn")
+        self._background_clear_btn.clicked.connect(self._clear_background_image)
+        bg_row.addWidget(self._background_clear_btn)
+        layout.addLayout(bg_row)
         layout.addSpacing(12)
 
         # Cover rotation
@@ -243,6 +287,45 @@ class SettingsPage(QWidget):
                 color: {c['text_secondary']};
                 font-size: {f['size_xs']}px;
             }}
+            QLineEdit#displayNameInput,
+            QLineEdit#backgroundImageInput {{
+                background-color: {c['bg_elevated']};
+                border: 1px solid {c['border']};
+                border-radius: 8px;
+                color: {c['text_primary']};
+                font-size: {f['size_sm']}px;
+                padding: 7px 12px;
+            }}
+            QLineEdit#displayNameInput:focus,
+            QLineEdit#backgroundImageInput:focus {{
+                border-color: {c['accent']};
+            }}
+            QPushButton#displayNameBtn,
+            QPushButton#backgroundBrowseBtn {{
+                background-color: {c['accent']};
+                color: #000;
+                border: none;
+                border-radius: 6px;
+                font-size: {f['size_xs']}px;
+                font-weight: bold;
+                padding: 6px 16px;
+            }}
+            QPushButton#displayNameBtn:hover,
+            QPushButton#backgroundBrowseBtn:hover {{
+                background-color: {c['accent_dim']};
+            }}
+            QPushButton#backgroundClearBtn {{
+                background-color: transparent;
+                color: {c['text_secondary']};
+                border: 1px solid {c['border']};
+                border-radius: 6px;
+                font-size: {f['size_xs']}px;
+                padding: 6px 14px;
+            }}
+            QPushButton#backgroundClearBtn:hover {{
+                color: {c['text_primary']};
+                border-color: {c['text_secondary']};
+            }}
             QPushButton#accountBtnLogin {{
                 background-color: {c['accent']};
                 color: #000;
@@ -322,6 +405,11 @@ class SettingsPage(QWidget):
     def _on_settings_ready(self, settings: dict) -> None:
         self._loading = True
         try:
+            self._display_name_input.setText(settings.get("display_name") or "Somnia")
+            self._background_image_input.setText(
+                settings.get("background_image_path") or ""
+            )
+
             vol = int(settings.get("volume") or 70)
             self._volume_slider.setValue(vol)
             self._volume_value.setText(str(vol))
@@ -345,6 +433,37 @@ class SettingsPage(QWidget):
         self._ctrl._player.state_changed.emit(self._ctrl._player.state)
 
     # ── change handlers ───────────────────────────────────────────────────────
+
+    def _on_profile_changed(self, name: str) -> None:
+        if self._display_name_input.text().strip() != name:
+            self._display_name_input.setText(name)
+
+    def _save_display_name(self) -> None:
+        if self._loading:
+            return
+        name = self._display_name_input.text().strip() or "Somnia"
+        self._display_name_input.setText(name)
+        asyncio.ensure_future(self._ctrl.save_setting("display_name", name))
+
+    def _on_background_changed(self, path: str) -> None:
+        if self._background_image_input.text().strip() != path:
+            self._background_image_input.setText(path)
+
+    def _choose_background_image(self) -> None:
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            self._background_image_input.text().strip(),
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.webp)",
+        )
+        if not path:
+            return
+        self._background_image_input.setText(path)
+        asyncio.ensure_future(self._ctrl.save_setting("background_image_path", path))
+
+    def _clear_background_image(self) -> None:
+        self._background_image_input.clear()
+        asyncio.ensure_future(self._ctrl.save_setting("background_image_path", ""))
 
     def _on_volume_changed(self, value: int) -> None:
         self._volume_value.setText(str(value))

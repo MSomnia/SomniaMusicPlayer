@@ -1,9 +1,10 @@
 COLORS = {
     # Background layers
     "bg_base":       "#0D0D0D",
+    "bg_panel":      "#1A1A1A",   # sidebar + content area (lighter gray)
     "bg_surface":    "#161616",
-    "bg_elevated":   "#1E1E1E",
-    "bg_hover":      "#2A2A2A",
+    "bg_elevated":   "#242424",
+    "bg_hover":      "#2E2E2E",
 
     # Accent
     "accent":        "#1DB954",

@@ -6,7 +6,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, QTimer, pyqtSignal, QSize,
 )
-from PyQt6.QtGui import QPainter, QLinearGradient, QColor, QCursor, QPixmap
+from PyQt6.QtGui import (
+    QPainter, QLinearGradient, QColor, QCursor, QPixmap, QPainterPath,
+)
 
 from core.lyrics_engine import LyricsEngine
 from core.models import LyricLine
@@ -185,7 +187,12 @@ class LyricsView(QWidget):
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(COLORS["bg_base"]))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        path = QPainterPath()
+        path.addRoundedRect(self.rect().toRectF(), 8, 8)
+        painter.setClipPath(path)
+        painter.fillPath(path, QColor(COLORS["bg_base"]))
 
         cover = self._blurred_cover_for_size(self.size())
         if cover is not None:
@@ -198,7 +205,7 @@ class LyricsView(QWidget):
         grad.setColorAt(0.0, QColor(r, g, b, 90 if cover else 140))
         grad.setColorAt(0.6, QColor(0x0D, 0x0D, 0x0D, 190 if cover else 230))
         grad.setColorAt(1.0, QColor(0x0D, 0x0D, 0x0D, 245 if cover else 255))
-        painter.fillRect(self.rect(), grad)
+        painter.fillPath(path, grad)
 
     # ── public API ────────────────────────────────────────────────────────────
 

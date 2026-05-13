@@ -4,7 +4,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from core.models import Track, Playlist, LyricLine
+from core.models import Track, Playlist, Album, LyricLine
 from platforms.base import AbstractPlatform
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,51 @@ class YTMusicClient(AbstractPlatform):
             return []
         tracks_raw = (data or {}).get("tracks", [])
         return [self._to_track(t) for t in tracks_raw if t.get("videoId")]
+
+    async def search_albums(self, query: str, limit: int = 5) -> list[Album]:
+        loop = asyncio.get_event_loop()
+        try:
+            results = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: self._ytm.search(query, filter="albums", limit=limit),
+                ),
+                timeout=10.0,
+            )
+        except Exception as exc:
+            logger.warning("YTMusic search_albums failed: %s", exc)
+            return []
+        albums = []
+        for r in (results or []):
+            thumbs = r.get("thumbnails") or []
+            cover = thumbs[-1]["url"] if thumbs else ""
+            artists = r.get("artists") or []
+            artist = artists[0]["name"] if artists else ""
+            albums.append(Album(
+                id=r.get("browseId", ""),
+                platform="ytmusic",
+                name=r.get("title", ""),
+                artist=artist,
+                cover_url=cover,
+                track_count=int(r.get("trackCount") or 0),
+                year=str(r.get("year", "")),
+            ))
+        return albums
+
+    async def get_album_tracks(self, album_id: str) -> list[Track]:
+        loop = asyncio.get_event_loop()
+        try:
+            data = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor, lambda: self._ytm.get_album(album_id)
+                ),
+                timeout=12.0,
+            )
+        except Exception as exc:
+            logger.warning("YTMusic get_album failed: %s", exc)
+            return []
+        raw = (data or {}).get("tracks", [])
+        return [self._to_track(t) for t in raw if t.get("videoId")]
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         if not track.id:

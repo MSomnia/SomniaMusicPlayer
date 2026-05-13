@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import httpx
-from core.models import Track, Playlist, LyricLine
+from core.models import Track, Playlist, Album, LyricLine
 from platforms.base import AbstractPlatform
 from utils.lrc_parser import parse_lrc
 
@@ -106,6 +106,48 @@ class NeteaseProxyClient(AbstractPlatform):
         songs = data.get("data", {}).get("dailySongs", [])
         tracks = [self._song_to_track(s) for s in songs]
         return [("每日推荐", tracks)] if tracks else []
+
+    async def search_albums(self, query: str, limit: int = 5) -> list[Album]:
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{self._base}/cloudsearch",
+                    params={"keywords": query, "type": 10, "limit": limit,
+                            "cookie": self._cookie_str()},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Netease search_albums failed: %s", exc)
+            return []
+        albums = []
+        for a in data.get("result", {}).get("albums", []):
+            albums.append(Album(
+                id=str(a["id"]),
+                platform="netease",
+                name=a.get("name", ""),
+                artist=a.get("artist", {}).get("name", ""),
+                cover_url=a.get("picUrl", ""),
+                track_count=a.get("size", 0),
+                year=str(a.get("publishTime", ""))[:4],
+            ))
+        return albums
+
+    async def get_album_tracks(self, album_id: str) -> list[Track]:
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{self._base}/album",
+                    params={"id": album_id, "cookie": self._cookie_str()},
+                    timeout=12.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Netease get_album_tracks failed: %s", exc)
+            return []
+        return [self._song_to_track(s) for s in data.get("songs", [])]
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         try:

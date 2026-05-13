@@ -25,6 +25,7 @@ class TrackListWidget(QWidget):
         self._list = QListWidget()
         self._list.setObjectName("trackList")
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.viewport().setStyleSheet("background: transparent;")
         self._list.itemDoubleClicked.connect(self._on_double_click)
         layout.addWidget(self._list)
 
@@ -68,20 +69,22 @@ class TrackListWidget(QWidget):
         c, f = COLORS, FONTS
         self.setStyleSheet(f"""
             #trackList {{
-                background-color: {c['bg_base']};
+                background-color: transparent;
                 border: none;
                 color: {c['text_primary']};
                 font-size: {f['size_sm']}px;
             }}
             #trackList::item {{
-                padding: 0px;
-                border-bottom: 1px solid {c['divider']};
+                padding: 2px 4px;
+                border-radius: 8px;
             }}
             #trackList::item:hover {{
                 background-color: {c['bg_hover']};
+                border-radius: 8px;
             }}
             #trackList::item:selected {{
                 background-color: {c['bg_elevated']};
+                border-radius: 8px;
             }}
             #statusLabel {{
                 color: {c['text_muted']};

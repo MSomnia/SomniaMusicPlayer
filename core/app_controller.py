@@ -82,8 +82,11 @@ class AppController(QObject):
     # Phase 6
     home_sections_ready = pyqtSignal(str, list)   # (platform, [(title, [Track])])
     library_ready = pyqtSignal(str, list)          # (platform, [Playlist])
+    album_search_ready = pyqtSignal(str, list)     # (platform, [Album])
     queue_changed = pyqtSignal(list, int)          # ([Track], current_index)
     settings_ready = pyqtSignal(dict)
+    profile_changed = pyqtSignal(str)
+    background_changed = pyqtSignal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -106,6 +109,8 @@ class AppController(QObject):
         self._library_cache: dict[str, tuple[float, list]] = {}
         # "platform:playlist_id" → (timestamp, tracks)
         self._tracks_cache: dict[str, tuple[float, list]] = {}
+        self._display_name = "Somnia"
+        self._background_image_path = ""
         from core.macos_media import MacOSMediaHandler
         self._macos_media = MacOSMediaHandler(self)
         self._wire_internal()
@@ -123,6 +128,14 @@ class AppController(QObject):
     @property
     def is_spotify_authenticated(self) -> bool:
         return self._spotify_client is not None
+
+    @property
+    def display_name(self) -> str:
+        return self._display_name
+
+    @property
+    def background_image_path(self) -> str:
+        return self._background_image_path
 
     # ── internal wiring ───────────────────────────────────────────────────────
 
@@ -159,6 +172,10 @@ class AppController(QObject):
 
     async def init(self) -> None:
         await self._repo.init()
+        self._display_name = (await self._repo.get_setting("display_name")) or "Somnia"
+        self._background_image_path = (
+            await self._repo.get_setting("background_image_path")
+        ) or ""
         await self._ensure_proxy()
         # Restore Netease session
         cookies = await self._netease_auth.load_cookies()
@@ -412,6 +429,28 @@ class AppController(QObject):
         tracks = await client.search(query)
         self.search_results_ready.emit(tracks)
         return tracks
+
+    async def search_albums(self, query: str, platform: str = "netease") -> None:
+        client = self._get_platform_client(platform)
+        if not client:
+            self.album_search_ready.emit(platform, [])
+            return
+        try:
+            albums = await client.search_albums(query, limit=6)
+        except Exception as exc:
+            logger.warning("search_albums failed for %s: %s", platform, exc)
+            albums = []
+        self.album_search_ready.emit(platform, albums)
+
+    async def get_album_tracks(self, album) -> list:
+        client = self._get_platform_client(album.platform)
+        if not client:
+            return []
+        try:
+            return await client.get_album_tracks(album.id)
+        except Exception as exc:
+            logger.warning("get_album_tracks failed: %s", exc)
+            return []
 
     async def play_track(self, track: Track) -> None:
         client = self._get_platform_client(track.platform)
@@ -702,7 +741,15 @@ class AppController(QObject):
     # ── settings ──────────────────────────────────────────────────────────────
 
     async def load_settings(self) -> None:
-        keys = ("volume", "repeat_mode", "shuffle", "cover_rotation", "lyrics_font_size")
+        keys = (
+            "volume",
+            "repeat_mode",
+            "shuffle",
+            "cover_rotation",
+            "lyrics_font_size",
+            "display_name",
+            "background_image_path",
+        )
         result = {}
         for key in keys:
             val = await self._repo.get_setting(key)
@@ -710,4 +757,14 @@ class AppController(QObject):
         self.settings_ready.emit(result)
 
     async def save_setting(self, key: str, value: str) -> None:
+        if key == "display_name":
+            value = value.strip() or "Somnia"
+            self._display_name = value
+        elif key == "background_image_path":
+            value = value.strip()
+            self._background_image_path = value
         await self._repo.set_setting(key, value)
+        if key == "display_name":
+            self.profile_changed.emit(value)
+        elif key == "background_image_path":
+            self.background_changed.emit(value)

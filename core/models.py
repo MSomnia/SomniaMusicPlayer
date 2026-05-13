@@ -32,6 +32,17 @@ class LyricLine:
 
 
 @dataclass
+class Album:
+    id: str
+    platform: str
+    name: str
+    artist: str
+    cover_url: str
+    track_count: int = 0
+    year: str = ""
+
+
+@dataclass
 class Playlist:
     id: str
     platform: str

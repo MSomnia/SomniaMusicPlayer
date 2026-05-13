@@ -56,6 +56,7 @@ class LibraryPage(QWidget):
 
         # Left: playlist list
         left = QWidget()
+        left.setObjectName("libraryPane")
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(4)
@@ -70,6 +71,7 @@ class LibraryPage(QWidget):
         self._playlist_list.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+        self._playlist_list.viewport().setStyleSheet("background: transparent;")
         self._playlist_list.hide()
         self._playlist_list.currentRowChanged.connect(self._on_playlist_selected)
         left_layout.addWidget(self._playlist_list, stretch=1)
@@ -77,6 +79,7 @@ class LibraryPage(QWidget):
 
         # Right: track list + controls
         right = QWidget()
+        right.setObjectName("libraryPane")
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(12, 0, 0, 0)
         right_layout.setSpacing(8)
@@ -104,6 +107,7 @@ class LibraryPage(QWidget):
         self._track_list.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+        self._track_list.viewport().setStyleSheet("background: transparent;")
         self._track_list.hide()
         self._track_list.itemDoubleClicked.connect(self._on_track_double_clicked)
         right_layout.addWidget(self._track_list, stretch=1)
@@ -166,8 +170,12 @@ class LibraryPage(QWidget):
                 font-size: {f['size_md']}px;
                 font-weight: bold;
             }}
+            #librarySplitter,
+            #libraryPane {{
+                background-color: transparent;
+            }}
             #playlistList {{
-                background-color: {c['bg_surface']};
+                background-color: transparent;
                 border: none;
                 border-right: 1px solid {c['border']};
                 color: {c['text_primary']};
@@ -175,30 +183,34 @@ class LibraryPage(QWidget):
             }}
             #playlistList::item {{
                 padding: 10px 12px;
-                border-bottom: 1px solid {c['divider']};
+                border-radius: 8px;
             }}
             #playlistList::item:hover {{
                 background-color: {c['bg_hover']};
+                border-radius: 8px;
             }}
             #playlistList::item:selected {{
                 background-color: {c['bg_elevated']};
                 border-left: 3px solid {c['accent']};
+                border-radius: 8px;
             }}
             #trackList {{
-                background-color: {c['bg_base']};
+                background-color: transparent;
                 border: none;
                 color: {c['text_primary']};
                 font-size: {f['size_sm']}px;
             }}
             #trackList::item {{
-                padding: 8px 12px;
-                border-bottom: 1px solid {c['divider']};
+                padding: 2px 4px;
+                border-radius: 8px;
             }}
             #trackList::item:hover {{
                 background-color: {c['bg_hover']};
+                border-radius: 8px;
             }}
             #trackList::item:selected {{
                 background-color: {c['bg_elevated']};
+                border-radius: 8px;
             }}
             #playAllBtn {{
                 background-color: {c['accent']};

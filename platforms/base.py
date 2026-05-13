@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from core.models import Track, Playlist, LyricLine
+from core.models import Track, Playlist, Album, LyricLine
 
 
 class AbstractPlatform(ABC):
@@ -31,4 +31,12 @@ class AbstractPlatform(ABC):
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         """Return recommended tracks based on *track* for autoplay."""
+        return []
+
+    async def search_albums(self, query: str, limit: int = 5) -> list[Album]:
+        """Return albums matching *query*."""
+        return []
+
+    async def get_album_tracks(self, album_id: str) -> list[Track]:
+        """Return tracks in the given album."""
         return []

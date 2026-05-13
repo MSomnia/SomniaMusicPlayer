@@ -1,8 +1,11 @@
 from __future__ import annotations
+from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPainter
+from ui.frosted import paint_frosted_panel
 from ui.theme import COLORS, FONTS
 
 
@@ -12,10 +15,13 @@ class SidebarWidget(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("sidebar")
+        self.setAutoFillBackground(False)
         self.setFixedWidth(200)
         self._nav_buttons: dict[str, QPushButton] = {}
         self._platform_buttons: dict[str, QPushButton] = {}
         self._platform_names: dict[str, str] = {}
+        self._display_name = "Somnia"
         self._setup_ui()
         self._apply_styles()
 
@@ -24,10 +30,11 @@ class SidebarWidget(QWidget):
         layout.setContentsMargins(0, 16, 0, 0)
         layout.setSpacing(2)
 
-        title = QLabel("Somnia")
-        title.setObjectName("appName")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self._title = QLabel()
+        self._title.setObjectName("appName")
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._title)
+        self._refresh_title()
         layout.addSpacing(16)
 
         for page_id, label in [
@@ -85,9 +92,10 @@ class SidebarWidget(QWidget):
     def _apply_styles(self) -> None:
         c, f = COLORS, FONTS
         self.setStyleSheet(f"""
-            SidebarWidget {{
-                background-color: {c['bg_surface']};
-                border-right: 1px solid {c['border']};
+            #sidebar {{
+                background-color: transparent;
+                border: none;
+                border-radius: 8px;
             }}
             #appName {{
                 color: {c['text_primary']};
@@ -97,13 +105,14 @@ class SidebarWidget(QWidget):
             }}
             #navButton {{
                 text-align: left;
-                padding: 8px 16px;
+                padding: 8px 14px;
+                margin: 1px 10px;
                 background: transparent;
                 border: none;
                 border-left: 3px solid transparent;
                 color: {c['text_secondary']};
                 font-size: {f['size_sm']}px;
-                border-radius: 0;
+                border-radius: 8px;
             }}
             #navButton:hover {{
                 background-color: {c['bg_hover']};
@@ -117,12 +126,13 @@ class SidebarWidget(QWidget):
             }}
             #platformButton {{
                 text-align: left;
-                padding: 6px 16px;
+                padding: 6px 14px;
+                margin: 1px 10px;
                 background: transparent;
                 border: none;
                 color: {c['text_secondary']};
                 font-size: {f['size_sm']}px;
-                border-radius: 0;
+                border-radius: 8px;
             }}
             #platformButton:hover {{
                 background-color: {c['bg_hover']};
@@ -149,6 +159,11 @@ class SidebarWidget(QWidget):
             }}
         """)
 
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        paint_frosted_panel(self, painter)
+        super().paintEvent(event)
+
     def set_active_page(self, page_id: str) -> None:
         for pid, btn in self._nav_buttons.items():
             btn.setChecked(pid == page_id)
@@ -162,3 +177,17 @@ class SidebarWidget(QWidget):
             btn.setText(f"●  {name}")
         else:
             btn.setText(f"○  {name}")
+
+    def set_display_name(self, name: str) -> None:
+        self._display_name = name.strip() or "Somnia"
+        self._refresh_title()
+
+    def _refresh_title(self) -> None:
+        hour = datetime.now().hour
+        if 5 <= hour < 12:
+            greeting = "早安"
+        elif 12 <= hour < 18:
+            greeting = "午安"
+        else:
+            greeting = "晚安"
+        self._title.setText(f"{greeting}，{self._display_name}")
