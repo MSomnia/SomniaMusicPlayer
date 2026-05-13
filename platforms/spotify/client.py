@@ -256,6 +256,35 @@ class SpotifyClient(AbstractPlatform):
             h["client-token"] = client_token
         return h
 
+    async def get_recommendations(self, track: Track) -> list[Track]:
+        try:
+            token = await self._auth.get_access_token()
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{_WEB_API_URL}/recommendations",
+                    params={"seed_tracks": track.id, "limit": 12},
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "User-Agent": _WEB_UA,
+                        **_APP_HEADERS,
+                    },
+                    timeout=10.0,
+                )
+                if resp.status_code == 200:
+                    tracks = [
+                        self._to_webapi_track(t)
+                        for t in resp.json().get("tracks", [])
+                        if t.get("id")
+                    ]
+                    if tracks:
+                        return tracks
+        except Exception as exc:
+            logger.warning("Spotify recommendations failed: %s", exc)
+        # Fallback: search by artist name
+        if track.artist:
+            return await self.search(track.artist, limit=12)
+        return []
+
     async def get_stream_url(self, track: Track) -> str:
         return f"spotify:track:{track.id}"
 

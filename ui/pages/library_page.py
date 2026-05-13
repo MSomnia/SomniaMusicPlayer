@@ -305,7 +305,8 @@ class LibraryPage(QWidget):
             return
         for track in tracks:
             s = track.duration_ms // 1000
-            text = f"{track.title}  —  {track.artist}  [{s // 60}:{s % 60:02d}]"
+            dur = f"  [{s // 60}:{s % 60:02d}]" if s else ""
+            text = f"{track.title}  —  {track.artist}{dur}"
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, track)
             item.setSizeHint(QSize(0, ROW_HEIGHT))

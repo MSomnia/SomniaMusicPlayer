@@ -128,6 +128,8 @@ class AppController(QObject):
 
     def _wire_internal(self) -> None:
         self._vlc.position_changed.connect(self._player.update_position)
+        if hasattr(self._vlc, "duration_changed"):
+            self._vlc.duration_changed.connect(self._player.update_duration)
         self._vlc.end_reached.connect(
             lambda: asyncio.ensure_future(self.play_next())
         )
@@ -510,10 +512,35 @@ class AppController(QObject):
     async def play_next(self) -> None:
         next_track = self._queue.next(self._player.state.repeat_mode)
         if next_track is None:
+            seed = self._player.state.current_track
             self._vlc.stop()
+            self._librespot.stop()
             self._player.stop()
+            if seed:
+                asyncio.ensure_future(self._autoplay(seed))
         else:
             await self.play_track(next_track)
+
+    async def _autoplay(self, seed: Track) -> None:
+        client = self._get_platform_client(seed.platform)
+        if not client:
+            self._vlc.stop()
+            self._player.stop()
+            return
+        try:
+            tracks = await client.get_recommendations(seed)
+        except Exception as exc:
+            logger.warning("Autoplay recommendations failed for %r: %s", seed.title, exc)
+            tracks = []
+        # Drop the seed track to avoid immediate repetition
+        tracks = [t for t in tracks if t.id != seed.id]
+        if not tracks:
+            self._vlc.stop()
+            self._player.stop()
+            return
+        self._queue.set_tracks(tracks, 0)
+        self._emit_queue_changed()
+        await self.play_track(tracks[0])
 
     async def play_prev(self) -> None:
         prev = self._queue.previous()

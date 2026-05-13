@@ -117,6 +117,24 @@ class YTMusicClient(AbstractPlatform):
         tracks_raw = (data or {}).get("tracks", [])
         return [self._to_track(t) for t in tracks_raw if t.get("videoId")]
 
+    async def get_recommendations(self, track: Track) -> list[Track]:
+        if not track.id:
+            return []
+        loop = asyncio.get_event_loop()
+        try:
+            data = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: self._ytm.get_watch_playlist(videoId=track.id, limit=15),
+                ),
+                timeout=12.0,
+            )
+        except Exception as exc:
+            logger.warning("YTMusic get_watch_playlist failed: %s", exc)
+            return []
+        raw = (data or {}).get("tracks", [])
+        return [self._to_track(t) for t in raw if t.get("videoId")]
+
     async def get_library_playlists(self) -> list[Playlist]:
         loop = asyncio.get_event_loop()
         playlists: list[Playlist] = []
@@ -200,20 +218,51 @@ class YTMusicClient(AbstractPlatform):
         return stream_url
 
     @staticmethod
+    def _parse_duration(r: dict) -> int:
+        """Return duration_ms from a ytmusicapi track dict.
+
+        Different endpoints use different fields:
+          - search()            → duration_seconds (int)
+          - get_watch_playlist()→ length ("M:SS" string)
+          - get_home()          → nothing (all None); VLC will fill it in later
+        """
+        secs = r.get("duration_seconds")
+        if secs:
+            return int(secs) * 1000
+        for key in ("length", "duration"):
+            val = r.get(key)
+            if not val or not isinstance(val, str):
+                continue
+            try:
+                parts = [int(p) for p in val.strip().split(":")]
+                if len(parts) == 2:
+                    return (parts[0] * 60 + parts[1]) * 1000
+                if len(parts) == 3:
+                    return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000
+            except (ValueError, IndexError):
+                pass
+        return 0
+
+    @staticmethod
     def _to_track(r: dict) -> Track:
         artists = [a["name"] for a in r.get("artists") or []]
         album_obj = r.get("album") or {}
+        # watch_playlist uses "thumbnail" (singular); others use "thumbnails"
         thumbs = r.get("thumbnails") or []
+        if not thumbs:
+            thumb = r.get("thumbnail")
+            if isinstance(thumb, dict):
+                thumbs = thumb.get("thumbnails") or []
         cover = thumbs[-1]["url"] if thumbs else ""
         return Track(
-            id=r.get("videoId") or "",   # guard: videoId can be None in some results
+            id=r.get("videoId") or "",
             platform="ytmusic",
             title=r.get("title", ""),
             artist=artists[0] if artists else "",
             artists=artists,
             album=album_obj.get("name", "") if isinstance(album_obj, dict) else "",
             album_cover_url=cover,
-            duration_ms=(r.get("duration_seconds") or 0) * 1000,
+            duration_ms=YTMusicClient._parse_duration(r),
         )
 
     @staticmethod

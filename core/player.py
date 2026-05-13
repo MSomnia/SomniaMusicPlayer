@@ -79,3 +79,9 @@ class UnifiedPlayer(QObject):
     def update_position(self, position_ms: int) -> None:
         self._state.position_ms = position_ms
         self.position_changed.emit(position_ms)
+
+    def update_duration(self, duration_ms: int) -> None:
+        if self._state.duration_ms == duration_ms:
+            return
+        self._state.duration_ms = duration_ms
+        self.state_changed.emit(self._state)

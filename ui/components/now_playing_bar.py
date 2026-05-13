@@ -53,7 +53,7 @@ class NowPlayingBar(QWidget):
 
     def _build_left(self) -> QWidget:
         widget = QWidget()
-        widget.setMinimumWidth(200)
+        widget.setFixedWidth(200)   # matches sidebar width
         hl = QHBoxLayout(widget)
         hl.setSpacing(12)
         hl.setContentsMargins(0, 0, 0, 0)

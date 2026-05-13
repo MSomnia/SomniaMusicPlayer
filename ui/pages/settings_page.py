@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QCheckBox, QComboBox, QFrame, QPushButton,
+    QCheckBox, QFrame, QPushButton,
 )
 from PyQt6.QtCore import Qt
 from ui.theme import COLORS, FONTS
@@ -77,29 +77,6 @@ class SettingsPage(QWidget):
         vol_row.addWidget(self._volume_value)
         vol_row.addStretch()
         layout.addLayout(vol_row)
-        layout.addSpacing(12)
-
-        # Repeat mode
-        rep_row = QHBoxLayout()
-        rep_row.addWidget(self._setting_label("循环模式"))
-        self._repeat_combo = QComboBox()
-        self._repeat_combo.setObjectName("settingCombo")
-        self._repeat_combo.addItems(["不循环", "循环全部", "单曲循环"])
-        self._repeat_combo.currentIndexChanged.connect(self._on_repeat_changed)
-        rep_row.addWidget(self._repeat_combo)
-        rep_row.addStretch()
-        layout.addLayout(rep_row)
-        layout.addSpacing(12)
-
-        # Shuffle
-        shuf_row = QHBoxLayout()
-        shuf_row.addWidget(self._setting_label("随机播放"))
-        self._shuffle_check = QCheckBox()
-        self._shuffle_check.setObjectName("settingCheck")
-        self._shuffle_check.stateChanged.connect(self._on_shuffle_changed)
-        shuf_row.addWidget(self._shuffle_check)
-        shuf_row.addStretch()
-        layout.addLayout(shuf_row)
         layout.addSpacing(24)
 
         # ── Display section ──────────────────────────────────────────────────
@@ -251,25 +228,6 @@ class SettingsPage(QWidget):
                 border-radius: 7px;
                 background: {c['text_primary']};
             }}
-            QComboBox#settingCombo {{
-                background-color: {c['bg_elevated']};
-                border: 1px solid {c['border']};
-                border-radius: 6px;
-                color: {c['text_primary']};
-                font-size: {f['size_sm']}px;
-                padding: 4px 12px;
-                min-width: 140px;
-            }}
-            QComboBox#settingCombo::drop-down {{
-                border: none;
-                width: 20px;
-            }}
-            QComboBox#settingCombo QAbstractItemView {{
-                background-color: {c['bg_elevated']};
-                color: {c['text_primary']};
-                border: 1px solid {c['border']};
-                selection-background-color: {c['bg_hover']};
-            }}
             QCheckBox#settingCheck::indicator {{
                 width: 18px; height: 18px;
                 border: 2px solid {c['border']};
@@ -368,13 +326,6 @@ class SettingsPage(QWidget):
             self._volume_slider.setValue(vol)
             self._volume_value.setText(str(vol))
 
-            repeat = settings.get("repeat_mode") or "none"
-            idx = {"none": 0, "all": 1, "one": 2}.get(repeat, 0)
-            self._repeat_combo.setCurrentIndex(idx)
-
-            shuffle = (settings.get("shuffle") or "false").lower() == "true"
-            self._shuffle_check.setChecked(shuffle)
-
             rotation = (settings.get("cover_rotation") or "true").lower() == "true"
             self._rotation_check.setChecked(rotation)
 
@@ -384,6 +335,15 @@ class SettingsPage(QWidget):
         finally:
             self._loading = False
 
+        # Apply repeat/shuffle to player state so the bottom bar reflects
+        # the saved settings. These controls live in the bottom bar now.
+        repeat = settings.get("repeat_mode") or "none"
+        if repeat in ("none", "all", "one"):
+            self._ctrl._player.set_repeat_mode(repeat)
+        shuffle = (settings.get("shuffle") or "false").lower() == "true"
+        self._ctrl._player.set_shuffle(shuffle)
+        self._ctrl._player.state_changed.emit(self._ctrl._player.state)
+
     # ── change handlers ───────────────────────────────────────────────────────
 
     def _on_volume_changed(self, value: int) -> None:
@@ -391,20 +351,6 @@ class SettingsPage(QWidget):
         if self._loading:
             return
         self._ctrl.set_volume(value)
-
-    def _on_repeat_changed(self, index: int) -> None:
-        if self._loading:
-            return
-        mode = ["none", "all", "one"][index]
-        self._ctrl._player.set_repeat_mode(mode)
-        asyncio.ensure_future(self._ctrl.save_setting("repeat_mode", mode))
-
-    def _on_shuffle_changed(self, state: int) -> None:
-        if self._loading:
-            return
-        enabled = state == Qt.CheckState.Checked.value
-        self._ctrl._player.set_shuffle(enabled)
-        asyncio.ensure_future(self._ctrl.save_setting("shuffle", str(enabled).lower()))
 
     def _on_rotation_changed(self, state: int) -> None:
         if self._loading:

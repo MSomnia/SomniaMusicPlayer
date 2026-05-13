@@ -4,10 +4,12 @@ import ctypes
 import ctypes.util
 import logging
 import sys
+import time
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel,
 )
-from ui.theme import COLORS
+from PyQt6.QtCore import Qt, QTimer
+from ui.theme import COLORS, FONTS
 from ui.components.sidebar import SidebarWidget
 from ui.components.now_playing_bar import NowPlayingBar
 from ui.components.lyrics_view import LyricsView
@@ -18,6 +20,43 @@ from ui.pages.library_page import LibraryPage
 from ui.pages.settings_page import SettingsPage
 
 logger = logging.getLogger(__name__)
+
+
+class _ErrorToast(QLabel):
+    """Transient overlay that shows '歌曲无法播放' and auto-hides after 3 s."""
+
+    _DURATION_MS = 3000
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__("  ✕  歌曲无法播放  ", parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedHeight(40)
+        self.hide()
+        c, f = COLORS, FONTS
+        self.setStyleSheet(f"""
+            _ErrorToast, QLabel {{
+                background-color: {c['bg_elevated']};
+                border: 1px solid #FF4444;
+                border-radius: 8px;
+                color: #FF6B6B;
+                font-size: {f['size_sm']}px;
+                font-weight: bold;
+            }}
+        """)
+
+    def popup(self) -> None:
+        p = self.parent()
+        w = 220
+        self.setGeometry((p.width() - w) // 2, 20, w, 40)
+        self.show()
+        self.raise_()
+        QTimer.singleShot(self._DURATION_MS, self.hide)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        if self.isVisible():
+            p = self.parent()
+            self.move((p.width() - self.width()) // 2, 20)
 
 
 def _apply_dark_titlebar(win_id: int) -> None:
@@ -137,8 +176,12 @@ class MainWindow(QMainWindow):
         self.now_playing = NowPlayingBar()
         root.addWidget(self.now_playing)
 
-        # Queue panel (lazy-created dialog)
+        # Queue panel (lazy-created popup)
         self._queue_panel: QueuePanel | None = None
+
+        # Error toast — child of central so it overlays the content area
+        self._error_toast = _ErrorToast(central)
+        self._last_error_skip: float = 0.0  # guard against rapid cascades
 
     def _wire_signals(self) -> None:
         ctrl = self._ctrl
@@ -197,6 +240,15 @@ class MainWindow(QMainWindow):
             self._lyrics_view.clear()
         elif state.status == "loading":
             self._lyrics_view.clear_cover_art()
+        if state.status == "error":
+            now = time.monotonic()
+            if now - self._last_error_skip >= 2.0:
+                self._last_error_skip = now
+                self._error_toast.popup()
+                QTimer.singleShot(
+                    800,
+                    lambda: asyncio.ensure_future(self._ctrl.play_next()),
+                )
 
     # ── navigation ────────────────────────────────────────────────────────────
 

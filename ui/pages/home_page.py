@@ -227,8 +227,10 @@ class HomePage(QWidget):
 
     @staticmethod
     def _fmt(ms: int) -> str:
+        if not ms:
+            return ""
         s = ms // 1000
-        return f"{s // 60}:{s % 60:02d}"
+        return f"[{s // 60}:{s % 60:02d}]"
 
     def _list_height(self, track_count: int) -> int:
         return max(1, track_count) * _TRACK_ROW_HEIGHT + 2
@@ -268,7 +270,8 @@ class HomePage(QWidget):
         if not expandable:
             list_widget.setMinimumHeight(140)
         for track in tracks:
-            text = f"{track.title}  —  {track.artist}  [{self._fmt(track.duration_ms)}]"
+            dur = self._fmt(track.duration_ms)
+            text = f"{track.title}  —  {track.artist}" + (f"  {dur}" if dur else "")
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, track)
             item.setSizeHint(QSize(0, ROW_HEIGHT))

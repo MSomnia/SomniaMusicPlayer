@@ -35,15 +35,18 @@ class TrackListWidget(QWidget):
 
     @staticmethod
     def _fmt(ms: int) -> str:
+        if not ms:
+            return ""
         s = ms // 1000
-        return f"{s // 60}:{s % 60:02d}"
+        return f"[{s // 60}:{s % 60:02d}]"
 
     def set_tracks(self, tracks: list[Track]) -> None:
         self._list.clear()
         self._status_label.hide()
         self._list.show()
         for track in tracks:
-            text = f"{track.title}  —  {track.artist}  [{self._fmt(track.duration_ms)}]"
+            dur = self._fmt(track.duration_ms)
+            text = f"{track.title}  —  {track.artist}" + (f"  {dur}" if dur else "")
             item = QListWidgetItem(text)
             item.setData(Qt.ItemDataRole.UserRole, track)
             self._list.addItem(item)

@@ -1,8 +1,11 @@
 from __future__ import annotations
+import logging
 import httpx
 from core.models import Track, Playlist, LyricLine
 from platforms.base import AbstractPlatform
 from utils.lrc_parser import parse_lrc
+
+logger = logging.getLogger(__name__)
 
 # Default URL for a locally-running NeteaseCloudMusicApi instance.
 # Start it with: npx @binaryify/netease-cloud-music-api
@@ -103,6 +106,21 @@ class NeteaseProxyClient(AbstractPlatform):
         songs = data.get("data", {}).get("dailySongs", [])
         tracks = [self._song_to_track(s) for s in songs]
         return [("每日推荐", tracks)] if tracks else []
+
+    async def get_recommendations(self, track: Track) -> list[Track]:
+        try:
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"{self._base}/simi/song",
+                    params={"id": track.id, "limit": 12, "cookie": self._cookie_str()},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Netease simi/song failed: %s", exc)
+            return []
+        return [self._song_to_track(s) for s in data.get("songs", [])]
 
     async def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
         async with httpx.AsyncClient() as http:

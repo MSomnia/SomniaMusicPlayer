@@ -26,6 +26,7 @@ class VLCBackend(QObject):
     """
 
     position_changed = pyqtSignal(int)   # ms
+    duration_changed = pyqtSignal(int)   # ms — emitted once when VLC reports a non-zero length
     end_reached = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
@@ -47,6 +48,7 @@ class VLCBackend(QObject):
         self._poll_timer.timeout.connect(self._on_poll)
 
         self._last_ended = False  # debounce end-reached from polling
+        self._reported_duration: int = 0  # last duration emitted via duration_changed
 
     def _wire_events(self) -> None:
         em = self._player.event_manager()
@@ -75,6 +77,12 @@ class VLCBackend(QObject):
         ms = self._player.get_time()
         if isinstance(ms, int) and ms >= 0:
             self.position_changed.emit(ms)
+        # Emit duration once when VLC first reports a non-zero length.
+        # This fills in duration_ms=0 tracks (e.g. ytmusic home page items).
+        length = self._player.get_length()
+        if isinstance(length, int) and length > 0 and length != self._reported_duration:
+            self._reported_duration = length
+            self.duration_changed.emit(length)
 
     @pyqtSlot()
     def _emit_end(self) -> None:
@@ -96,6 +104,7 @@ class VLCBackend(QObject):
             )
             return
         self._last_ended = False
+        self._reported_duration = 0
         media = self._instance.media_new(url)
         for opt in (vlc_options or []):
             media.add_option(opt)

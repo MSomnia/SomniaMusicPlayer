@@ -40,9 +40,9 @@ class QueuePanel(QWidget):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        title = QLabel("播放队列")
-        title.setObjectName("panelTitle")
-        header.addWidget(title)
+        self._title_label = QLabel("播放队列")
+        self._title_label.setObjectName("panelTitle")
+        header.addWidget(self._title_label)
         header.addStretch()
 
         clear_btn = QPushButton("清空")
@@ -127,17 +127,21 @@ class QueuePanel(QWidget):
     def _on_queue_changed(self, tracks: list, current_index: int) -> None:
         self._list.clear()
         if not tracks:
+            self._title_label.setText("播放队列")
             self._list.hide()
             self._status_label.show()
             self._status_label.setText("队列为空")
             self.setFixedHeight(_H_EMPTY)
             return
+        remaining = max(0, len(tracks) - current_index - 1)
+        self._title_label.setText(f"播放队列  ·  剩余 {remaining} 首")
         self._status_label.hide()
         self._list.show()
         self.setFixedHeight(_H_FULL)
         for i, track in enumerate(tracks):
             s = track.duration_ms // 1000
-            text = f"{track.title}  —  {track.artist}  [{s // 60}:{s % 60:02d}]"
+            dur = f"  [{s // 60}:{s % 60:02d}]" if s else ""
+            text = f"{track.title}  —  {track.artist}{dur}"
             if i == current_index:
                 text = f"▶  {text}"
             item = QListWidgetItem(text)

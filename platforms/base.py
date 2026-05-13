@@ -28,3 +28,7 @@ class AbstractPlatform(ABC):
     async def get_playlist_tracks(self, playlist_id: str) -> list[Track]:
         """Return tracks in the given playlist."""
         return []
+
+    async def get_recommendations(self, track: Track) -> list[Track]:
+        """Return recommended tracks based on *track* for autoplay."""
+        return []
