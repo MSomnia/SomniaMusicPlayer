@@ -287,3 +287,34 @@ def test_sidebar_set_platform_status_logged_out(qapp_instance, qtbot):
     w.set_platform_status("netease", True)
     w.set_platform_status("netease", False)
     assert "○" in w._platform_buttons["netease"].text()
+
+
+from ui.pages.standby_page import StandbyPage
+
+
+def test_standby_page_creates_hidden(qapp_instance, qtbot):
+    ctrl = _MockCtrl()
+    # StandbyPage 需要一个有 background_pixmap() 方法的父 widget
+    from PyQt6.QtWidgets import QWidget
+    from PyQt6.QtGui import QPixmap
+    parent_mock = QWidget()
+    parent_mock.background_pixmap = lambda: QPixmap()
+    qtbot.addWidget(parent_mock)
+    page = StandbyPage(ctrl, parent_mock)
+    qtbot.addWidget(page)
+    assert page.isHidden()
+    assert page._close_btn is not None
+
+
+def test_standby_page_has_left_right_panels(qapp_instance, qtbot):
+    ctrl = _MockCtrl()
+    from PyQt6.QtWidgets import QWidget
+    from PyQt6.QtGui import QPixmap
+    parent_mock = QWidget()
+    parent_mock.background_pixmap = lambda: QPixmap()
+    qtbot.addWidget(parent_mock)
+    page = StandbyPage(ctrl, parent_mock)
+    qtbot.addWidget(page)
+    assert page._title_label is not None
+    assert page._artist_label is not None
+    assert page._cover_label is not None
