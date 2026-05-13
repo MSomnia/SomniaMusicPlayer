@@ -1,7 +1,7 @@
 from __future__ import annotations
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QSizePolicy,
+    QFrame, QScrollArea, QSizePolicy, QGraphicsOpacityEffect,
 )
 from PyQt6.QtCore import (
     Qt, QPropertyAnimation, QEasingCurve, QTimer, pyqtSignal,
@@ -399,8 +399,38 @@ class StandbyPage(QWidget):
         self._scroll_anim.start()
 
     def enter(self) -> None:
+        if self._fade_anim is not None and self._fade_anim.state() == QPropertyAnimation.State.Running:
+            self._fade_anim.stop()
+
+        effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(effect)
+        effect.setOpacity(0.0)
+
         self.show()
         self.raise_()
 
+        self._fade_anim = QPropertyAnimation(effect, b"opacity", self)
+        self._fade_anim.setDuration(300)
+        self._fade_anim.setStartValue(0.0)
+        self._fade_anim.setEndValue(1.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade_anim.start()
+
     def leave(self) -> None:
-        self.hide()
+        if self._fade_anim is not None and self._fade_anim.state() == QPropertyAnimation.State.Running:
+            self._fade_anim.stop()
+
+        effect = self.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(self)
+            self.setGraphicsEffect(effect)
+
+        start_opacity = effect.opacity() if isinstance(effect, QGraphicsOpacityEffect) else 1.0
+
+        self._fade_anim = QPropertyAnimation(effect, b"opacity", self)
+        self._fade_anim.setDuration(200)
+        self._fade_anim.setStartValue(start_opacity)
+        self._fade_anim.setEndValue(0.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._fade_anim.finished.connect(self.hide)
+        self._fade_anim.start()

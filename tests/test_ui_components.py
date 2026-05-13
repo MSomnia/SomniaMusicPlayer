@@ -386,3 +386,18 @@ def test_standby_set_cover_color_updates_gradient(qapp_instance, qtbot):
     page = _make_standby(qapp_instance, qtbot)
     page.set_cover_color(100, 150, 200)
     assert page._gradient_rgb == (100, 150, 200)
+
+
+def test_standby_enter_uses_opacity_effect(qapp_instance, qtbot):
+    from PyQt6.QtWidgets import QGraphicsOpacityEffect
+    page = _make_standby(qapp_instance, qtbot)
+    page.enter()
+    assert isinstance(page.graphicsEffect(), QGraphicsOpacityEffect)
+
+
+def test_standby_leave_creates_fade_animation(qapp_instance, qtbot):
+    page = _make_standby(qapp_instance, qtbot)
+    page.enter()
+    page.leave()
+    assert page._fade_anim is not None
+    qtbot.waitUntil(lambda: page.isHidden(), timeout=1000)
