@@ -6,6 +6,7 @@ from ui.components.now_playing_bar import NowPlayingBar
 from ui.app_window import MainWindow
 from core.models import PlayerState
 from ui.theme import COLORS
+from ui.pages.standby_page import StandbyPage
 from unittest.mock import MagicMock
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
 
@@ -289,9 +290,6 @@ def test_sidebar_set_platform_status_logged_out(qapp_instance, qtbot):
     assert "○" in w._platform_buttons["netease"].text()
 
 
-from ui.pages.standby_page import StandbyPage
-
-
 def test_standby_page_creates_hidden(qapp_instance, qtbot):
     ctrl = _MockCtrl()
     # StandbyPage 需要一个有 background_pixmap() 方法的父 widget
@@ -331,7 +329,6 @@ def _make_standby(qapp_instance, qtbot) -> "StandbyPage":
     page._parent_ref = parent_mock  # keep parent alive to prevent Qt child deletion
     qtbot.addWidget(page)
     parent_mock.show()
-    page.show()
     return page
 
 
@@ -368,8 +365,8 @@ def test_standby_set_lyrics_switches_to_lyrics_mode(qapp_instance, qtbot):
         LyricLine(start_ms=3000, end_ms=6000, text="第二行"),
     ]
     page.set_lyrics(lines)
-    assert page._scroll.isVisible()
-    assert not page._no_lyrics_label.isVisible()
+    assert not page._scroll.isHidden()
+    assert page._no_lyrics_label.isHidden()
     assert len(page._line_widgets) == 2
 
 
@@ -408,7 +405,6 @@ def test_main_window_has_standby_page(qapp_instance, qtbot):
     win = MainWindow(ctrl)
     qtbot.addWidget(win)
     assert hasattr(win, "_standby_page")
-    from ui.pages.standby_page import StandbyPage
     assert isinstance(win._standby_page, StandbyPage)
     assert win._standby_page.isHidden()
 

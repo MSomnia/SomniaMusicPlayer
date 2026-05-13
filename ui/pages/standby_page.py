@@ -399,6 +399,13 @@ class StandbyPage(QWidget):
         self._scroll_anim.start()
 
     def enter(self) -> None:
+        # Already fully visible and not mid-animation — nothing to do
+        if self.isVisible() and (
+            self._fade_anim is None
+            or self._fade_anim.state() != QPropertyAnimation.State.Running
+        ):
+            return
+
         if self._fade_anim is not None and self._fade_anim.state() == QPropertyAnimation.State.Running:
             self._fade_anim.stop()
 
