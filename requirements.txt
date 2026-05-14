@@ -12,6 +12,8 @@ sounddevice>=0.4.7
 soundfile>=0.12.1
 librespot>=0.0.5
 Pillow>=10.3.0
+pyobjc-framework-MediaPlayer>=9.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"
 
 # Dev
 pytest>=8.2.0
