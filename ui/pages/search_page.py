@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QScrollArea, QFrame,
+    QLabel, QScrollArea, QFrame, QApplication,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QCursor
@@ -71,13 +71,15 @@ class _AlbumCard(QWidget):
         """)
 
     def set_cover(self, pixmap: QPixmap) -> None:
-        self._cover_lbl.setPixmap(
-            pixmap.scaled(
-                _COVER_SIZE, _COVER_SIZE,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
+        dpr = QApplication.primaryScreen().devicePixelRatio()
+        phys = int(_COVER_SIZE * dpr)
+        scaled = pixmap.scaled(
+            phys, phys,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
         )
+        scaled.setDevicePixelRatio(dpr)
+        self._cover_lbl.setPixmap(scaled)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -463,11 +465,13 @@ class SearchPage(QWidget):
     async def _set_header_cover(self, url: str) -> None:
         pixmap = await _fetch_pixmap(url)
         if pixmap and not pixmap.isNull():
-            self._album_cover_lbl.setPixmap(
-                pixmap.scaled(60, 60,
-                              Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                              Qt.TransformationMode.SmoothTransformation)
-            )
+            dpr = QApplication.primaryScreen().devicePixelRatio()
+            phys = int(60 * dpr)
+            scaled = pixmap.scaled(phys, phys,
+                                   Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                   Qt.TransformationMode.SmoothTransformation)
+            scaled.setDevicePixelRatio(dpr)
+            self._album_cover_lbl.setPixmap(scaled)
 
     # ── helpers ───────────────────────────────────────────────────────────────
 

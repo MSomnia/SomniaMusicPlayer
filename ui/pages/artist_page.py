@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem,
 )
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
 from ui.theme import COLORS, FONTS, scrollbar_qss
@@ -159,21 +160,24 @@ class ArtistPage(QWidget):
             px.loadFromData(data)
             if px.isNull():
                 return
+            dpr = QApplication.primaryScreen().devicePixelRatio()
+            phys = int(80 * dpr)
             px = px.scaled(
-                80, 80,
+                phys, phys,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
             # Circular clip
-            out = QPixmap(80, 80)
+            out = QPixmap(phys, phys)
             out.fill(Qt.GlobalColor.transparent)
             painter = QPainter(out)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             path = QPainterPath()
-            path.addEllipse(0.0, 0.0, 80.0, 80.0)
+            path.addEllipse(0.0, 0.0, float(phys), float(phys))
             painter.setClipPath(path)
             painter.drawPixmap(0, 0, px)
             painter.end()
+            out.setDevicePixelRatio(dpr)
             self._cover_lbl.setPixmap(out)
         except Exception:
             pass

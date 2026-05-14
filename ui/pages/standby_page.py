@@ -260,22 +260,26 @@ class StandbyPage(QWidget):
 
     def _draw_cover(self, pixmap: QPixmap) -> None:
         size = 130
+        dpr = self.devicePixelRatioF()
+        phys = int(size * dpr)
+        radius_phys = int(10 * dpr)
         scaled = pixmap.scaled(
-            size, size,
+            phys, phys,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-        rounded = QPixmap(size, size)
+        rounded = QPixmap(phys, phys)
         rounded.fill(Qt.GlobalColor.transparent)
         p = QPainter(rounded)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(0, 0, size, size, 10, 10)
+        path.addRoundedRect(0, 0, phys, phys, radius_phys, radius_phys)
         p.setClipPath(path)
-        x = (size - scaled.width()) // 2
-        y = (size - scaled.height()) // 2
+        x = (phys - scaled.width()) // 2
+        y = (phys - scaled.height()) // 2
         p.drawPixmap(x, y, scaled)
         p.end()
+        rounded.setDevicePixelRatio(dpr)
         self._cover_label.setPixmap(rounded)
         self._cover_label.setText("")
         self._cover_label.setStyleSheet("")

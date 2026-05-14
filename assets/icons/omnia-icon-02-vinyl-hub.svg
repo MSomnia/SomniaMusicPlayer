@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Omnia icon concept 02 - vinyl hub</title>
+  <desc id="desc">A macOS app icon with a glossy black vinyl record, three colored grooves, and an illuminated O hub.</desc>
+  <defs>
+    <linearGradient id="bg" x1="160" y1="70" x2="860" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#292929"/>
+      <stop offset="0.55" stop-color="#0E0E0E"/>
+      <stop offset="1" stop-color="#030303"/>
+    </linearGradient>
+    <radialGradient id="record" cx="40%" cy="28%" r="72%">
+      <stop offset="0" stop-color="#353535"/>
+      <stop offset="0.34" stop-color="#151515"/>
+      <stop offset="0.72" stop-color="#070707"/>
+      <stop offset="1" stop-color="#020202"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="250" y1="160" x2="700" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.25"/>
+      <stop offset="0.2" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="356" fill="url(#record)" filter="url(#shadow)"/>
+  <circle cx="512" cy="512" r="314" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="2"/>
+  <circle cx="512" cy="512" r="262" fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="2"/>
+  <circle cx="512" cy="512" r="210" fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="2"/>
+  <circle cx="512" cy="512" r="158" fill="none" stroke="#FFFFFF" stroke-opacity="0.035" stroke-width="2"/>
+
+  <g fill="none" stroke-linecap="round" filter="url(#glow)">
+    <path d="M259 396C299 302 391 236 499 231C618 226 721 297 763 399" stroke="#1DB954" stroke-width="32"/>
+    <path d="M782 461C797 567 752 675 659 735C569 793 452 790 365 729" stroke="#F97316" stroke-width="32"/>
+    <path d="M318 681C251 598 236 482 284 384" stroke="#FF0000" stroke-width="32"/>
+  </g>
+
+  <path d="M282 246C394 153 602 137 744 239C617 191 434 201 331 300C291 337 271 291 282 246Z" fill="url(#shine)"/>
+
+  <circle cx="512" cy="512" r="122" fill="#0C0C0C" stroke="#2D2D2D" stroke-width="10"/>
+  <circle cx="512" cy="512" r="76" fill="none" stroke="#FFFFFF" stroke-width="34" filter="url(#glow)"/>
+  <circle cx="512" cy="512" r="24" fill="#111111" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="6"/>
+  <path d="M488 466C488 452 504 444 516 451L591 496C603 503 603 521 591 528L516 573C504 580 488 572 488 558V466Z" fill="#FFFFFF"/>
+</svg>

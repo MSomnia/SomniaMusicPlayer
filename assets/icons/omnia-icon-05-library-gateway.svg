@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Omnia icon concept 05 - library gateway</title>
+  <desc id="desc">A macOS app icon with layered album tiles behind a central Omnia O gateway.</desc>
+  <defs>
+    <linearGradient id="bg" x1="150" y1="75" x2="880" y2="950" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C2C2C"/>
+      <stop offset="0.48" stop-color="#101010"/>
+      <stop offset="1" stop-color="#040404"/>
+    </linearGradient>
+    <linearGradient id="greenTile" x1="250" y1="230" x2="480" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#54E889"/>
+      <stop offset="1" stop-color="#1DB954"/>
+    </linearGradient>
+    <linearGradient id="orangeTile" x1="535" y1="220" x2="760" y2="485" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB25D"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+    <linearGradient id="redTile" x1="390" y1="525" x2="640" y2="775" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF5A5A"/>
+      <stop offset="1" stop-color="#FF0000"/>
+    </linearGradient>
+    <radialGradient id="hub" cx="44%" cy="34%" r="74%">
+      <stop offset="0" stop-color="#303030"/>
+      <stop offset="0.6" stop-color="#101010"/>
+      <stop offset="1" stop-color="#060606"/>
+    </radialGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="155%">
+      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#000000" flood-opacity="0.48"/>
+    </filter>
+    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect x="118" y="112" width="788" height="800" rx="188" fill="none" stroke="#FFFFFF" stroke-opacity="0.045" stroke-width="4"/>
+
+  <g filter="url(#tileShadow)">
+    <rect x="240" y="244" width="250" height="250" rx="42" fill="url(#greenTile)" transform="rotate(-13 365 369)"/>
+    <rect x="534" y="232" width="250" height="250" rx="42" fill="url(#orangeTile)" transform="rotate(11 659 357)"/>
+    <rect x="388" y="526" width="250" height="250" rx="42" fill="url(#redTile)" transform="rotate(4 513 651)"/>
+  </g>
+
+  <g opacity="0.25" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round">
+    <path d="M309 337H420"/>
+    <path d="M300 386H398"/>
+    <path d="M599 326H710"/>
+    <path d="M607 375H690"/>
+    <path d="M452 621H574"/>
+    <path d="M462 670H550"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <circle cx="512" cy="512" r="210" fill="url(#hub)" stroke="#383838" stroke-width="14"/>
+    <circle cx="512" cy="512" r="134" fill="#0A0A0A" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="4"/>
+  </g>
+
+  <g fill="none" stroke-linecap="round" filter="url(#glow)">
+    <path d="M373 474C390 407 446 359 512 359" stroke="#1DB954" stroke-width="34"/>
+    <path d="M512 359C581 359 638 409 652 477" stroke="#F97316" stroke-width="34"/>
+    <path d="M652 548C636 615 580 665 512 665C444 665 388 616 372 550" stroke="#FF0000" stroke-width="34"/>
+  </g>
+
+  <circle cx="512" cy="512" r="76" fill="none" stroke="#FFFFFF" stroke-width="34"/>
+  <path d="M490 468C490 454 506 446 518 453L588 496C600 504 600 520 588 528L518 571C506 578 490 570 490 556V468Z" fill="#FFFFFF"/>
+</svg>

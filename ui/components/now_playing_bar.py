@@ -368,24 +368,29 @@ class NowPlayingBar(QWidget):
         px = QPixmap()
         if not px.loadFromData(data):
             return
+        dpr = self.devicePixelRatioF()
+        phys = int(48 * dpr)
+        radius_phys = int(6 * dpr)
         px = px.scaled(
-            48, 48,
+            phys, phys,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
-        # Crop to exact 48×48 from center
-        if px.width() > 48 or px.height() > 48:
-            x = (px.width() - 48) // 2
-            y = (px.height() - 48) // 2
-            px = px.copy(x, y, 48, 48)
-        # Round corners to match CSS border-radius: 6px
-        rounded = QImage(48, 48, QImage.Format.Format_ARGB32_Premultiplied)
+        # Crop to exact physical size from center
+        if px.width() > phys or px.height() > phys:
+            x = (px.width() - phys) // 2
+            y = (px.height() - phys) // 2
+            px = px.copy(x, y, phys, phys)
+        # Round corners to match CSS border-radius: 6px (in physical pixels)
+        rounded = QImage(phys, phys, QImage.Format.Format_ARGB32_Premultiplied)
         rounded.fill(Qt.GlobalColor.transparent)
         painter = QPainter(rounded)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, 48, 48), 6, 6)
+        path.addRoundedRect(QRectF(0, 0, phys, phys), radius_phys, radius_phys)
         painter.setClipPath(path)
         painter.drawPixmap(0, 0, px)
         painter.end()
-        self._cover.setPixmap(QPixmap.fromImage(rounded))
+        result = QPixmap.fromImage(rounded)
+        result.setDevicePixelRatio(dpr)
+        self._cover.setPixmap(result)
