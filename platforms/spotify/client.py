@@ -480,26 +480,88 @@ class SpotifyClient(AbstractPlatform):
         return None
 
     async def get_artist_top_tracks(self, artist_id: str, limit: int = 30) -> list[Track]:
+        artist_uri = f"spotify:artist:{artist_id}"
         try:
             token = await self._auth.get_access_token()
             async with httpx.AsyncClient() as http:
+                client_token = await self._get_client_token(http)
+
+                # ── 1. Partner API: artist overview/top-tracks operations ──
+                for op_name in ("queryArtistOverview", "queryArtistTopTracks", "getArtist"):
+                    op_hash = await self._get_partner_hash(http, op_name)
+                    if not op_hash:
+                        continue
+                    try:
+                        resp = await http.post(
+                            _PARTNER_URL,
+                            json={
+                                "variables": {
+                                    "uri": artist_uri,
+                                    "locale": "",
+                                    "includePrerelease": False,
+                                },
+                                "operationName": op_name,
+                                "extensions": {
+                                    "persistedQuery": {
+                                        "version": 1,
+                                        "sha256Hash": op_hash,
+                                    }
+                                },
+                            },
+                            headers=self._partner_headers(token, client_token),
+                            timeout=12.0,
+                        )
+                        if resp.status_code == 200:
+                            tracks = self._parse_artist_top_tracks_partner(resp.json(), limit)
+                            if tracks:
+                                return tracks
+                    except Exception:
+                        continue
+
+                # ── 2. Web API fallback (rate-limit-aware) ─────────────────
+                if time.time() < self._rate_limited_until:
+                    logger.debug("Spotify artist top tracks: rate limited, skipping Web API")
+                    return []
                 resp = await http.get(
                     f"{_WEB_API_URL}/artists/{artist_id}/top-tracks",
                     params={"market": "US"},
                     headers={
                         "Authorization": f"Bearer {token}",
-                        "Accept": "application/json",
                         "User-Agent": _WEB_UA,
                         **_APP_HEADERS,
                     },
                     timeout=10.0,
                 )
+                if resp.status_code == 429:
+                    self._rate_limited_until = time.time() + _retry_after_seconds(resp)
+                    return []
                 resp.raise_for_status()
-                tracks_raw = resp.json().get("tracks", [])
+                return [self._to_webapi_track(t)
+                        for t in resp.json().get("tracks", [])[:limit] if t.get("id")]
         except Exception as exc:
             logger.warning("Spotify get_artist_top_tracks failed: %s", exc)
             return []
-        return [self._to_webapi_track(t) for t in tracks_raw[:limit] if t.get("id")]
+
+    @staticmethod
+    def _parse_artist_top_tracks_partner(data: dict, limit: int) -> list[Track]:
+        """Parse queryArtistOverview / queryArtistTopTracks partner response."""
+        artist_union = (
+            data.get("data", {}).get("artistUnion")
+            or data.get("data", {}).get("artist")
+            or {}
+        )
+        items = (
+            artist_union.get("discography", {})
+            .get("topTracks", {})
+            .get("items", [])
+        )
+        tracks: list[Track] = []
+        for item in items[:limit]:
+            track_data = item.get("track") or item
+            if not track_data.get("id"):
+                continue
+            tracks.append(SpotifyClient._to_track(track_data))
+        return tracks
 
     async def get_recommendations(self, track: Track) -> list[Track]:
         try:

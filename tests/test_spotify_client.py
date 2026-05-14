@@ -364,7 +364,38 @@ ARTIST_SEARCH_RESPONSE = {
     }
 }
 
-ARTIST_TOP_TRACKS_RESPONSE = {
+ARTIST_TOP_TRACKS_PARTNER_RESPONSE = {
+    "data": {
+        "artistUnion": {
+            "discography": {
+                "topTracks": {
+                    "items": [
+                        {
+                            "track": {
+                                "id": "track_001",
+                                "name": "God's Plan",
+                                "artists": {
+                                    "items": [{"profile": {"name": "Drake"}}]
+                                },
+                                "albumOfTrack": {
+                                    "name": "Scorpion",
+                                    "coverArt": {
+                                        "sources": [
+                                            {"url": "https://example.com/alb.jpg"}
+                                        ]
+                                    },
+                                },
+                                "duration": {"totalMilliseconds": 198973},
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
+
+ARTIST_TOP_TRACKS_WEBAPI_RESPONSE = {
     "tracks": [
         {
             "id": "track_001",
@@ -411,17 +442,43 @@ async def test_spotify_search_artist_returns_none_on_empty():
     assert artist is None
 
 
-async def test_spotify_get_artist_top_tracks():
+async def test_spotify_get_artist_top_tracks_via_partner_api():
+    from platforms.spotify.client import SpotifyClient
     client, _ = _make_client()
+    client._client_token = "client_token"
+    SpotifyClient._op_hash_cache["queryArtistOverview"] = "fakehash"
+
     mock_resp = MagicMock()
-    mock_resp.json.return_value = ARTIST_TOP_TRACKS_RESPONSE
+    mock_resp.json.return_value = ARTIST_TOP_TRACKS_PARTNER_RESPONSE
     mock_resp.raise_for_status = MagicMock()
     mock_resp.status_code = 200
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_resp)):
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=mock_resp)):
         tracks = await client.get_artist_top_tracks("3TVXtAsR1Inumwj472S9r4")
 
     assert len(tracks) == 1
     assert tracks[0].title == "God's Plan"
     assert tracks[0].platform == "spotify"
+
+
+async def test_spotify_get_artist_top_tracks_webapi_fallback():
+    from platforms.spotify.client import SpotifyClient
+    client, _ = _make_client()
+    client._client_token = "client_token"
+    # No partner hashes cached → skip Partner API, use Web API
+    for op in ("queryArtistOverview", "queryArtistTopTracks", "getArtist"):
+        SpotifyClient._op_hash_cache.pop(op, None)
+
+    mock_post = AsyncMock(return_value=MagicMock(status_code=404))
+    mock_get_resp = MagicMock()
+    mock_get_resp.json.return_value = ARTIST_TOP_TRACKS_WEBAPI_RESPONSE
+    mock_get_resp.raise_for_status = MagicMock()
+    mock_get_resp.status_code = 200
+
+    with patch("httpx.AsyncClient.post", new=mock_post), \
+         patch("httpx.AsyncClient.get", new=AsyncMock(return_value=mock_get_resp)):
+        tracks = await client.get_artist_top_tracks("3TVXtAsR1Inumwj472S9r4")
+
+    assert len(tracks) == 1
+    assert tracks[0].title == "God's Plan"
     assert tracks[0].is_explicit is True
