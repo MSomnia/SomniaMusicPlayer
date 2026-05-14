@@ -22,11 +22,15 @@ class MacOSMediaHandler:
     """Updates MPNowPlayingInfoCenter and registers MPRemoteCommandCenter handlers.
 
     Gracefully degrades when PyObjC is not installed.
+    Two update paths:
+      update_full()     — on track/state change: full info dict + explicit playbackState
+      update_position() — on 250ms tick: only elapsed time + rate + playbackState
     """
 
     def __init__(self, ctrl) -> None:
         self._ctrl = ctrl
         self._cover_data: bytes | None = None
+        self._current_track: "Track | None" = None
         if _AVAILABLE:
             self._register_commands()
 
@@ -80,16 +84,55 @@ class MacOSMediaHandler:
     def set_cover_data(self, data: bytes) -> None:
         self._cover_data = data
 
-    def update(self, track: "Track | None", position_ms: int, is_playing: bool) -> None:
+    def update_full(self, track: "Track | None", position_ms: int, is_playing: bool) -> None:
+        """Full update: call on track change, play/pause, or seek."""
         if not _AVAILABLE:
             return
+        self._current_track = track
         if track is None:
             self._clear()
             return
         try:
             self._update_now_playing(track, position_ms, is_playing)
+            self._set_playback_state(is_playing)
         except Exception as exc:
-            logger.debug("NowPlayingInfo update failed: %s", exc)
+            logger.debug("NowPlayingInfo full update failed: %s", exc)
+
+    def update_position(self, position_ms: int, is_playing: bool) -> None:
+        """Lightweight update: call on every position tick (250ms)."""
+        if not _AVAILABLE or self._current_track is None:
+            return
+        try:
+            from MediaPlayer import (
+                MPNowPlayingInfoCenter,
+                MPNowPlayingInfoPropertyElapsedPlaybackTime,
+                MPNowPlayingInfoPropertyPlaybackRate,
+            )
+            center = MPNowPlayingInfoCenter.defaultCenter()
+            info = dict(center.nowPlayingInfo() or {})
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position_ms / 1000.0
+            info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0 if is_playing else 0.0
+            center.setNowPlayingInfo_(info)
+            self._set_playback_state(is_playing)
+        except Exception as exc:
+            logger.debug("NowPlayingInfo position update failed: %s", exc)
+
+    # ── internal ─────────────────────────────────────────────────────────────
+
+    def _set_playback_state(self, is_playing: bool) -> None:
+        try:
+            from MediaPlayer import (
+                MPNowPlayingInfoCenter,
+                MPNowPlayingPlaybackStatePlaying,
+                MPNowPlayingPlaybackStatePaused,
+            )
+            state = (
+                MPNowPlayingPlaybackStatePlaying if is_playing
+                else MPNowPlayingPlaybackStatePaused
+            )
+            MPNowPlayingInfoCenter.defaultCenter().setPlaybackState_(state)
+        except Exception as exc:
+            logger.debug("playbackState update failed: %s", exc)
 
     def _clear(self) -> None:
         try:
@@ -98,7 +141,9 @@ class MacOSMediaHandler:
         except Exception:
             pass
 
-    def _update_now_playing(self, track: "Track", position_ms: int, is_playing: bool) -> None:
+    def _update_now_playing(
+        self, track: "Track", position_ms: int, is_playing: bool
+    ) -> None:
         from MediaPlayer import (
             MPNowPlayingInfoCenter,
             MPMediaItemPropertyTitle,
