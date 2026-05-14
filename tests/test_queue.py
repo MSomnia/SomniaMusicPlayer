@@ -99,3 +99,38 @@ def test_shuffle_preserves_current_track():
     current_before = q.current_track
     q.shuffle()
     assert q.current_track == current_before
+
+
+def test_peek_next_returns_next_without_advancing():
+    q = PlayQueue()
+    tracks = [_t("1"), _t("2"), _t("3")]
+    q.set_tracks(tracks, start_index=0)
+    peeked = q.peek_next()
+    assert peeked == tracks[1]
+    assert q.current_track == tracks[0]   # index 未推进
+    assert q.current_index == 0
+
+
+def test_peek_next_at_end_no_repeat_returns_none():
+    q = PlayQueue()
+    q.set_tracks([_t("1")], start_index=0)
+    assert q.peek_next(repeat_mode="none") is None
+
+
+def test_peek_next_repeat_all_returns_first():
+    q = PlayQueue()
+    tracks = [_t("1"), _t("2")]
+    q.set_tracks(tracks, start_index=1)
+    assert q.peek_next(repeat_mode="all") == tracks[0]
+
+
+def test_peek_next_repeat_one_returns_current():
+    q = PlayQueue()
+    tracks = [_t("1"), _t("2")]
+    q.set_tracks(tracks, start_index=0)
+    assert q.peek_next(repeat_mode="one") == tracks[0]
+
+
+def test_peek_next_empty_queue_returns_none():
+    q = PlayQueue()
+    assert q.peek_next() is None

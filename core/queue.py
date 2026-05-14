@@ -45,6 +45,19 @@ class PlayQueue:
         self._index = nxt
         return self.current_track
 
+    def peek_next(self, repeat_mode: str = "none") -> Track | None:
+        """Return the next track without advancing the index."""
+        if not self._tracks:
+            return None
+        if repeat_mode == "one":
+            return self.current_track
+        nxt = self._index + 1
+        if nxt >= len(self._tracks):
+            if repeat_mode == "all":
+                return self._tracks[0]
+            return None
+        return self._tracks[nxt]
+
     def previous(self) -> Track | None:
         if not self._tracks:
             return None
