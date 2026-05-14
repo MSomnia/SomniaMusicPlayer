@@ -644,7 +644,7 @@ class AppController(QObject):
     # ── macOS media integration ───────────────────────────────────────────────
 
     def _on_player_state_changed(self, state) -> None:
-        self._macos_media.update(
+        self._macos_media.update_full(
             state.current_track,
             state.position_ms,
             state.status == "playing",
@@ -652,11 +652,7 @@ class AppController(QObject):
 
     def _on_position_changed(self, position_ms: int) -> None:
         state = self._player.state
-        self._macos_media.update(
-            state.current_track,
-            position_ms,
-            state.status == "playing",
-        )
+        self._macos_media.update_position(position_ms, state.status == "playing")
         if (
             state.status == "playing"
             and state.current_track is not None

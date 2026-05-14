@@ -486,3 +486,35 @@ async def test_play_next_falls_back_to_autoplay_if_no_prefetch(ctrl):
     await _asyncio.sleep(0)
 
     mock_client.get_recommendations.assert_awaited_once()
+
+
+def test_on_player_state_changed_calls_update_full(ctrl):
+    """_on_player_state_changed 应调用 update_full，不调用 update_position。"""
+    from core.models import PlayerState
+    ctrl._macos_media = MagicMock()
+    state = PlayerState(
+        status="playing",
+        current_track=_track(),
+        position_ms=30_000,
+        duration_ms=180_000,
+    )
+    ctrl._on_player_state_changed(state)
+    ctrl._macos_media.update_full.assert_called_once_with(
+        state.current_track, state.position_ms, True
+    )
+    ctrl._macos_media.update_position.assert_not_called()
+
+
+def test_on_position_changed_calls_update_position(ctrl):
+    """_on_position_changed 应调用 update_position，不调用 update_full。"""
+    from core.models import PlayerState
+    ctrl._macos_media = MagicMock()
+    ctrl._player._state = PlayerState(
+        status="playing",
+        current_track=_track(),
+        position_ms=0,
+        duration_ms=180_000,
+    )
+    ctrl._on_position_changed(45_000)
+    ctrl._macos_media.update_position.assert_called_once_with(45_000, True)
+    ctrl._macos_media.update_full.assert_not_called()
