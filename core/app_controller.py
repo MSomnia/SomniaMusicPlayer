@@ -818,9 +818,16 @@ class AppController(QObject):
 
     async def remove_track_from_playlist(self, track: Track, playlist) -> bool:
         if track.platform != playlist.platform:
+            logger.warning(
+                "remove_track_from_playlist: platform mismatch track=%r playlist=%r",
+                track.platform, playlist.platform,
+            )
             return False
         client = self._get_platform_client(track.platform)
         if not client:
+            logger.warning(
+                "remove_track_from_playlist: no client for platform %r", track.platform
+            )
             return False
         try:
             ok = await client.remove_track_from_playlist(playlist.id, track)

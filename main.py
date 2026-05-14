@@ -1,7 +1,14 @@
 from __future__ import annotations
 import asyncio
+import logging
 import sys
 from PyQt6.QtWidgets import QApplication
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(levelname)s %(name)s: %(message)s",
+    stream=sys.stderr,
+)
 from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401 — must precede QApplication
 from PyQt6.QtGui import QImageReader
 import qasync

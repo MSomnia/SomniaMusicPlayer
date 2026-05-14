@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import logging
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget,
     QListWidgetItem, QSplitter,
@@ -8,6 +9,8 @@ from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from ui.components.track_row import TrackRow, ROW_HEIGHT
 from core.models import Playlist
 from ui.theme import COLORS, FONTS, scrollbar_qss
+
+logger = logging.getLogger(__name__)
 
 _PLATFORMS = [
     ("netease", "网易云音乐"),
@@ -346,6 +349,10 @@ class LibraryPage(QWidget):
             self._display_tracks(tracks)
 
     async def _on_remove_track(self, track, playlist) -> None:
+        logger.warning(
+            "remove: track.id=%r platform=%r | playlist.id=%r platform=%r",
+            track.id, track.platform, playlist.id, playlist.platform,
+        )
         ok = await self._ctrl.remove_track_from_playlist(track, playlist)
         if ok:
             self._remove_track_from_view(track)
