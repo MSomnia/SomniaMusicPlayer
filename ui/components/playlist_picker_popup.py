@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QLabel, QPushButton,
     QScrollArea, QWidget, QApplication,
 )
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal
-from PyQt6.QtGui import QCursor
+from PyQt6.QtCore import Qt, QPoint, QRectF, pyqtSignal
+from PyQt6.QtGui import QCursor, QPainter, QPainterPath, QColor
 from core.models import Playlist
 from ui.theme import COLORS, FONTS
 
@@ -16,6 +16,7 @@ _PLATFORM_LABELS = {
 
 _WIDTH = 220
 _MAX_LIST_HEIGHT = 260
+_RADIUS = 6
 
 
 class PlaylistPickerPopup(QFrame):
@@ -23,14 +24,8 @@ class PlaylistPickerPopup(QFrame):
 
     def __init__(self, platform: str, parent=None) -> None:
         super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(_WIDTH)
-        self.setStyleSheet(f"""
-            PlaylistPickerPopup {{
-                background-color: {COLORS['bg_elevated']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
-            }}
-        """)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(4, 6, 4, 6)
@@ -73,10 +68,11 @@ class PlaylistPickerPopup(QFrame):
         )
         self._scroll.setMaximumHeight(_MAX_LIST_HEIGHT)
         self._scroll.setVisible(False)
-        self._scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-        )
+        self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        self._scroll.viewport().setAutoFillBackground(False)
+
         self._list_widget = QWidget()
+        self._list_widget.setAutoFillBackground(False)
         self._list_layout = QVBoxLayout(self._list_widget)
         self._list_layout.setContentsMargins(0, 0, 0, 0)
         self._list_layout.setSpacing(1)
@@ -153,6 +149,18 @@ class PlaylistPickerPopup(QFrame):
     def _on_item_clicked(self, playlist: Playlist) -> None:
         self.playlist_selected.emit(playlist)
         self.close()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(
+            QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+            _RADIUS, _RADIUS,
+        )
+        painter.fillPath(path, QColor(COLORS['bg_elevated']))
+        painter.setPen(QColor(COLORS['border']))
+        painter.drawPath(path)
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
         if event.key() == Qt.Key.Key_Escape:
