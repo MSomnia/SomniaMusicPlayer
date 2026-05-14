@@ -7,11 +7,11 @@ import sys
 import time
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel,
-    QLineEdit, QTextEdit, QPlainTextEdit, QApplication,
+    QLineEdit, QTextEdit, QPlainTextEdit, QApplication, QMenuBar, QMessageBox,
 )
 from ui.components.playlist_picker_popup import PlaylistPickerPopup
 from PyQt6.QtCore import Qt, QTimer, QEvent, QObject
-from PyQt6.QtGui import QCursor, QPainter, QPixmap
+from PyQt6.QtGui import QAction, QCursor, QKeySequence, QPainter, QPixmap
 from ui.theme import COLORS, FONTS
 from ui.frosted import paint_frosted_panel
 from ui.components.sidebar import SidebarWidget
@@ -241,6 +241,7 @@ class MainWindow(QMainWindow):
         self._ctrl = ctrl
         self.setWindowTitle("SomniaMusicPlayer")
         self.setMinimumSize(900, 600)
+        self._setup_menu_bar()
         self._setup_ui()
         self._apply_styles()
         self._wire_signals()
@@ -265,6 +266,128 @@ class MainWindow(QMainWindow):
             central = self._app_root
             np_h = self.now_playing.height()
             self._standby_page.setGeometry(0, 0, central.width(), central.height() - np_h)
+
+    def _setup_menu_bar(self) -> None:
+        if sys.platform == "darwin":
+            menu_bar = QMenuBar()
+            menu_bar.setNativeMenuBar(True)
+            self._menu_bar = menu_bar
+        else:
+            menu_bar = self.menuBar()
+
+        app_name = self.windowTitle()
+
+        app_menu = menu_bar.addMenu(app_name)
+        about_action = QAction(f"About {app_name}", self)
+        about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        about_action.triggered.connect(self._show_about_dialog)
+        app_menu.addAction(about_action)
+
+        settings_action = QAction("Settings...", self)
+        settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        settings_action.setShortcut(QKeySequence.StandardKey.Preferences)
+        settings_action.triggered.connect(
+            lambda checked=False: self._on_nav("settings")
+        )
+        app_menu.addAction(settings_action)
+
+        app_menu.addSeparator()
+
+        quit_action = QAction(f"Quit {app_name}", self)
+        quit_action.setMenuRole(QAction.MenuRole.QuitRole)
+        quit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        quit_action.triggered.connect(QApplication.instance().quit)
+        app_menu.addAction(quit_action)
+
+        view_menu = menu_bar.addMenu("View")
+        for label, page_id in [
+            ("Home", "home"),
+            ("Search", "search"),
+            ("Library", "library"),
+            ("Lyrics", "lyrics"),
+            ("Settings", "settings"),
+        ]:
+            action = QAction(label, self)
+            action.triggered.connect(
+                lambda checked=False, target=page_id: self._on_nav(target)
+            )
+            view_menu.addAction(action)
+        view_menu.addSeparator()
+        standby_action = QAction("Toggle Standby", self)
+        standby_action.triggered.connect(self._toggle_standby)
+        view_menu.addAction(standby_action)
+
+        playback_menu = menu_bar.addMenu("Playback")
+        play_pause_action = QAction("Play/Pause", self)
+        play_pause_action.setShortcut(QKeySequence(Qt.Key.Key_Space))
+        play_pause_action.triggered.connect(self._ctrl.toggle_play_pause)
+        playback_menu.addAction(play_pause_action)
+
+        previous_action = QAction("Previous Track", self)
+        previous_action.triggered.connect(
+            lambda: asyncio.ensure_future(self._ctrl.play_prev())
+        )
+        playback_menu.addAction(previous_action)
+
+        next_action = QAction("Next Track", self)
+        next_action.triggered.connect(
+            lambda: asyncio.ensure_future(self._ctrl.play_next())
+        )
+        playback_menu.addAction(next_action)
+        playback_menu.addSeparator()
+
+        queue_action = QAction("Show Queue", self)
+        queue_action.triggered.connect(self._show_queue)
+        playback_menu.addAction(queue_action)
+
+        window_menu = menu_bar.addMenu("Window")
+        minimize_action = QAction("Minimize", self)
+        minimize_action.setShortcut(QKeySequence("Ctrl+M"))
+        minimize_action.triggered.connect(self.showMinimized)
+        window_menu.addAction(minimize_action)
+
+        zoom_action = QAction("Zoom", self)
+        zoom_action.triggered.connect(self._toggle_zoom)
+        window_menu.addAction(zoom_action)
+
+        window_menu.addSeparator()
+        bring_front_action = QAction("Bring All to Front", self)
+        bring_front_action.triggered.connect(self._bring_to_front)
+        window_menu.addAction(bring_front_action)
+
+        help_menu = menu_bar.addMenu("Help")
+        help_action = QAction(f"{app_name} Help", self)
+        help_action.triggered.connect(self._show_help_dialog)
+        help_menu.addAction(help_action)
+
+    def _toggle_zoom(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+
+    def _bring_to_front(self) -> None:
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _show_about_dialog(self) -> None:
+        app = QApplication.instance()
+        name = self.windowTitle()
+        version = app.applicationVersion() if app else "0.1.0"
+        QMessageBox.about(
+            self,
+            f"About {name}",
+            f"{name}\nVersion {version}",
+        )
+
+    def _show_help_dialog(self) -> None:
+        QMessageBox.information(
+            self,
+            "SomniaMusicPlayer Help",
+            "Use the sidebar and bottom playback bar as usual. The menu mirrors "
+            "the same navigation and playback controls.",
+        )
 
     def _setup_ui(self) -> None:
         central = _AppRoot()

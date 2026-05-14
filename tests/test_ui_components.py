@@ -237,6 +237,47 @@ def test_main_window_has_sidebar_and_bar(qapp_instance, qtbot):
     assert w.content is not None
 
 
+def _menu_bar_for(window):
+    if hasattr(window, "_menu_bar"):
+        return window._menu_bar
+    return window.menuBar()
+
+
+def _menu_action(window, menu_title: str, action_text: str):
+    menu_bar = _menu_bar_for(window)
+    for menu_action in menu_bar.actions():
+        if menu_action.text().replace("&", "") != menu_title:
+            continue
+        menu = menu_action.menu()
+        if menu is None:
+            continue
+        for action in menu.actions():
+            if action.text().replace("&", "") == action_text:
+                return action
+    return None
+
+
+def test_main_window_menu_uses_existing_actions(qapp_instance, qtbot):
+    w = MainWindow(_MockCtrl())
+    qtbot.addWidget(w)
+
+    menu_titles = [
+        action.text().replace("&", "")
+        for action in _menu_bar_for(w).actions()
+    ]
+    assert "SomniaMusicPlayer" in menu_titles
+    assert "View" in menu_titles
+    assert "Playback" in menu_titles
+    assert "Window" in menu_titles
+    assert "Help" in menu_titles
+    assert _menu_action(w, "Playback", "Next Track") is not None
+
+    settings_action = _menu_action(w, "View", "Settings")
+    assert settings_action is not None
+    settings_action.trigger()
+    assert w.content.currentIndex() == w._page_map["settings"]
+
+
 def test_main_window_syncs_volume_between_bar_and_settings(qapp_instance, qtbot):
     ctrl = _MockCtrl()
     w = MainWindow(ctrl)

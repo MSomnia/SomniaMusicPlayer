@@ -39,7 +39,7 @@ async def _run(app: QApplication) -> None:
 def main() -> None:
     QImageReader.setAllocationLimit(1024)  # raise Qt 6 default 256 MB → 1 GB
     app = QApplication(sys.argv)
-    app.setApplicationName("SomniaMusicPlayer")
+    app.setApplicationName("Omnia")
     app.setApplicationVersion("0.1.0")
 
     loop = qasync.QEventLoop(app)
