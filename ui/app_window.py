@@ -8,8 +8,9 @@ import time
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel,
 )
+from ui.components.playlist_picker_popup import PlaylistPickerPopup
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QPainter, QPixmap
+from PyQt6.QtGui import QCursor, QPainter, QPixmap
 from ui.theme import COLORS, FONTS
 from ui.frosted import paint_frosted_panel
 from ui.components.sidebar import SidebarWidget
@@ -24,6 +25,12 @@ from ui.pages.standby_page import StandbyPage
 from ui.pages.artist_page import ArtistPage
 
 logger = logging.getLogger(__name__)
+
+_PLATFORM_LABELS = {
+    "netease": "网易云音乐",
+    "spotify": "Spotify",
+    "ytmusic": "YouTube Music",
+}
 
 
 class _ErrorToast(QLabel):
@@ -61,6 +68,44 @@ class _ErrorToast(QLabel):
         if self.isVisible():
             p = self.parent()
             self.move((p.width() - self.width()) // 2, 20)
+
+
+class _StatusToast(QLabel):
+    _DURATION_MS = 2200
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedHeight(36)
+        self.hide()
+
+    def popup(self, message: str, success: bool = True) -> None:
+        c, f = COLORS, FONTS
+        border = COLORS["accent"] if success else "#FF4444"
+        text = COLORS["text_primary"] if success else "#FF6B6B"
+        self.setText(f"  {message}  ")
+        self.setStyleSheet(f"""
+            _StatusToast, QLabel {{
+                background-color: {c['bg_elevated']};
+                border: 1px solid {border};
+                border-radius: 8px;
+                color: {text};
+                font-size: {f['size_sm']}px;
+                font-weight: bold;
+            }}
+        """)
+        p = self.parent()
+        w = min(max(180, self.fontMetrics().horizontalAdvance(message) + 48), 360)
+        self.setGeometry((p.width() - w) // 2, 68, w, 36)
+        self.show()
+        self.raise_()
+        QTimer.singleShot(self._DURATION_MS, self.hide)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        if self.isVisible():
+            p = self.parent()
+            self.move((p.width() - self.width()) // 2, 68)
 
 
 class _AppRoot(QWidget):
@@ -243,6 +288,7 @@ class MainWindow(QMainWindow):
 
         # Error toast — child of central so it overlays the content area
         self._error_toast = _ErrorToast(central)
+        self._status_toast = _StatusToast(central)
         self._last_error_skip: float = 0.0  # guard against rapid cascades
 
         # Standby page — full-body overlay, hidden by default
@@ -316,6 +362,9 @@ class MainWindow(QMainWindow):
         self.now_playing.lyrics_toggled.connect(self._toggle_lyrics)
         self.now_playing.track_info_clicked.connect(self._show_lyrics)
         self.now_playing.queue_requested.connect(self._show_queue)
+        self.now_playing.playlist_requested.connect(
+            self._on_now_playing_playlist_requested
+        )
         self._lyrics_view.back_requested.connect(self._toggle_lyrics)
 
         # Artist page
@@ -339,6 +388,8 @@ class MainWindow(QMainWindow):
         self._library_page.artist_clicked.connect(
             lambda t: self._navigate_to_artist(t.artist, t.platform)
         )
+        self._home_page.playlist_requested.connect(self._request_add_to_playlist)
+        self._search_page.playlist_requested.connect(self._request_add_to_playlist)
 
     # ── state handlers ────────────────────────────────────────────────────────
 
@@ -433,6 +484,48 @@ class MainWindow(QMainWindow):
         y = btn.top() - self._queue_panel.height() - 8
         self._queue_panel.move(x, y)
         self._queue_panel.show()
+
+    # ── add to playlist ──────────────────────────────────────────────────────
+
+    def _on_now_playing_playlist_requested(self) -> None:
+        track = self._ctrl.current_state.current_track
+        if track is None:
+            return
+        btn = self.now_playing.playlist_btn_global_rect()
+        self._request_add_to_playlist(track, btn.bottomLeft())
+
+    def _request_add_to_playlist(self, track, pos=None) -> None:
+        asyncio.ensure_future(
+            self._open_add_to_playlist_menu(track, pos or QCursor.pos())
+        )
+
+    async def _open_add_to_playlist_menu(self, track, pos) -> None:
+        if not track:
+            return
+        if not self._is_platform_authenticated(track.platform):
+            ok = await self._ensure_platform_auth(track.platform)
+            if not ok:
+                self._status_toast.popup("需要先登录对应平台", success=False)
+                return
+
+        popup = PlaylistPickerPopup(track.platform, parent=self)
+
+        async def _on_selected(playlist) -> None:
+            ok = await self._ctrl.add_track_to_playlist(track, playlist)
+            if ok:
+                self._status_toast.popup(f"已加入 {playlist.name}")
+            else:
+                msg = getattr(self._ctrl, "last_playlist_error", "") or "加入歌单失败"
+                self._status_toast.popup(msg, success=False)
+
+        popup.playlist_selected.connect(lambda p: asyncio.ensure_future(_on_selected(p)))
+        popup.show_at(pos)
+
+        try:
+            playlists = await self._ctrl.get_addable_playlists(track.platform)
+            popup.set_playlists(playlists)
+        except Exception:
+            popup.set_error("获取歌单失败")
 
     # ── platform login ────────────────────────────────────────────────────────
 

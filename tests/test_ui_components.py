@@ -561,3 +561,51 @@ def test_main_window_toggle_standby_shows_and_hides(qapp_instance, qtbot):
     assert win._standby_page.isVisible()
     win._toggle_standby()
     qtbot.waitUntil(lambda: win._standby_page.isHidden(), timeout=1000)
+
+
+@pytest.mark.asyncio
+async def test_add_to_playlist_shows_popup_before_fetch(qapp_instance, qtbot):
+    """popup.show_at() must be called before awaiting get_addable_playlists."""
+    import asyncio
+    from unittest.mock import patch, AsyncMock
+    from PyQt6.QtCore import QPoint
+    from ui.components.playlist_picker_popup import PlaylistPickerPopup
+    from core.models import Track
+
+    ctrl = _MockCtrl()
+    ctrl.is_spotify_authenticated = True
+
+    async def slow_get(platform):
+        await asyncio.sleep(10)  # slow — popup must appear before this returns
+        return []
+
+    ctrl.get_addable_playlists = slow_get
+    ctrl.add_track_to_playlist = AsyncMock(return_value=True)
+
+    win = MainWindow(ctrl)
+    qtbot.addWidget(win)
+
+    track = Track(
+        id="t1", platform="spotify", title="Song", artist="Artist",
+        artists=["Artist"], album="Album", album_cover_url="", duration_ms=180000,
+    )
+
+    show_at_calls: list = []
+
+    def recording_show_at(self, pos):
+        show_at_calls.append(pos)
+
+    with patch.object(PlaylistPickerPopup, "show_at", recording_show_at):
+        task = asyncio.ensure_future(
+            win._open_add_to_playlist_menu(track, QPoint(100, 100))
+        )
+        await asyncio.sleep(0)  # let the coroutine run up to the first await
+
+        # show_at called before the slow fetch → popup shown immediately
+        assert len(show_at_calls) == 1
+
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
