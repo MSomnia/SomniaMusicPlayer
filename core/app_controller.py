@@ -640,6 +640,28 @@ class AppController(QObject):
             position_ms,
             state.status == "playing",
         )
+        if (
+            state.status == "playing"
+            and state.current_track is not None
+            and not self._prefetch_done
+            and self._prefetch_task is None
+        ):
+            platform = state.current_track.platform
+            threshold = _PREFETCH_THRESHOLD.get(platform, _PREFETCH_FALLBACK_MS)
+            duration = state.duration_ms
+            if duration > 0:
+                should = (duration - position_ms) <= threshold
+            else:
+                should = position_ms >= _PREFETCH_FALLBACK_MS
+            if should:
+                self._prefetch_done = True
+                self._prefetch_task = asyncio.ensure_future(self._prefetch_next())
+
+    async def _prefetch_next(self) -> None:
+        pass  # stub — replaced in full implementation below
+
+    async def _prefetch_stream_url(self, track: Track) -> None:
+        pass  # stub — replaced in full implementation below
 
     # ── home recommendations ──────────────────────────────────────────────────
 

@@ -280,3 +280,52 @@ def test_prefetch_state_initialized(ctrl):
     assert ctrl._prefetch_done is False
     assert ctrl._prefetched_next_track is None
     assert ctrl._prefetched_autoplay is None
+
+
+async def test_prefetch_triggered_near_end_of_track(ctrl):
+    """_on_position_changed 在剩余时间 ≤ 阈值时启动 _prefetch_task。"""
+    mock_client = MagicMock()
+    mock_client.get_stream_url = AsyncMock(return_value="https://cdn.example.com/a.mp3")
+    ctrl._netease_client = mock_client
+
+    t1 = _track(id="t1", duration_ms=180_000)
+    t2 = _track(id="t2", duration_ms=180_000)
+    ctrl._queue.set_tracks([t1, t2], 0)
+    await ctrl.play_track(t1)
+
+    # 剩余 3s（< netease 阈值 5s），且 prefetch_done=False
+    ctrl._on_position_changed(177_000)   # 180000 - 177000 = 3000ms 剩余
+
+    assert ctrl._prefetch_task is not None
+
+
+async def test_prefetch_not_triggered_when_done(ctrl):
+    """_prefetch_done=True 时不重复触发。"""
+    mock_client = MagicMock()
+    mock_client.get_stream_url = AsyncMock(return_value="https://cdn.example.com/a.mp3")
+    ctrl._netease_client = mock_client
+
+    t1 = _track(id="t1", duration_ms=180_000)
+    t2 = _track(id="t2", duration_ms=180_000)
+    ctrl._queue.set_tracks([t1, t2], 0)
+    await ctrl.play_track(t1)
+
+    ctrl._prefetch_done = True
+    ctrl._on_position_changed(177_000)
+
+    assert ctrl._prefetch_task is None
+
+
+async def test_prefetch_not_triggered_too_early(ctrl):
+    """剩余时间 > 阈值时不触发。"""
+    mock_client = MagicMock()
+    mock_client.get_stream_url = AsyncMock(return_value="https://cdn.example.com/a.mp3")
+    ctrl._netease_client = mock_client
+
+    t1 = _track(id="t1", duration_ms=180_000)
+    ctrl._queue.set_tracks([t1, _track(id="t2")], 0)
+    await ctrl.play_track(t1)
+
+    ctrl._on_position_changed(10_000)   # 170s 剩余，远 > 5s 阈值
+
+    assert ctrl._prefetch_task is None
