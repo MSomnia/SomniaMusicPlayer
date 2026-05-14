@@ -2,8 +2,8 @@ from __future__ import annotations
 import asyncio
 import httpx
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal
-from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
+from PyQt6.QtCore import Qt, QRectF, QBuffer, QSize, pyqtSignal
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor, QImageReader
 from core.models import Track
 from ui.theme import COLORS, FONTS
 
@@ -26,8 +26,9 @@ ARTIST_WIDTH  = 150
 DUR_WIDTH     = 55
 COVER_SIZE    = 28   # shared by TrackRow and _QueueRow
 COVER_RADIUS  = 6    # corner radius applied to all cover pixmaps
-_BTN_W        = 76
+_BTN_W        = 66
 _BTN_H        = 24
+_BTN_GAP      = 6
 
 # Module-level pixmap cache: URL → QPixmap (original resolution).
 # Shared across all TrackRow / _QueueRow instances; avoids duplicate fetches.
@@ -63,8 +64,18 @@ async def fetch_cover(url: str, size: int) -> QPixmap | None:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(url, timeout=5.0)
                 data = resp.content
-            px = QPixmap()
-            px.loadFromData(data)
+            buf = QBuffer()
+            buf.setData(data)
+            buf.open(QBuffer.OpenModeFlag.ReadOnly)
+            reader = QImageReader(buf)
+            reader.setAutoTransform(True)
+            orig = reader.size()
+            # Decode at 2× target size at most — avoids loading multi-MB originals
+            # into memory just to display a small thumbnail.
+            cap = size * 2
+            if orig.isValid() and (orig.width() > cap or orig.height() > cap):
+                reader.setScaledSize(QSize(cap, cap))
+            px = QPixmap.fromImage(reader.read())
             if px.isNull():
                 return None
             _cover_cache[url] = px
@@ -94,6 +105,7 @@ class TrackRow(QWidget):
     """
 
     queue_clicked = pyqtSignal(object)   # Track
+    playlist_clicked = pyqtSignal(object)  # Track
     artist_clicked = pyqtSignal(object)  # Track
 
     def __init__(self, track: Track, parent=None) -> None:
@@ -135,12 +147,19 @@ class TrackRow(QWidget):
         layout.addWidget(self._dur_lbl)
 
         # ── Hover button (absolutely positioned, outside layout) ──────────────
-        self._btn = QPushButton("加入队列", self)
-        self._btn.setObjectName("addToQueueBtn")
-        self._btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn.hide()
-        self._btn.clicked.connect(self._on_btn_clicked)
+        self._queue_btn = QPushButton("加队列", self)
+        self._queue_btn.setObjectName("rowActionBtn")
+        self._queue_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._queue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._queue_btn.hide()
+        self._queue_btn.clicked.connect(self._on_queue_btn_clicked)
+
+        self._playlist_btn = QPushButton("加歌单", self)
+        self._playlist_btn.setObjectName("rowActionBtn")
+        self._playlist_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._playlist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._playlist_btn.hide()
+        self._playlist_btn.clicked.connect(self._on_playlist_btn_clicked)
 
         self.setStyleSheet(f"""
             TrackRow {{ background-color: transparent; }}
@@ -163,15 +182,15 @@ class TrackRow(QWidget):
                 font-size: {f['size_sm']}px;
                 background: transparent;
             }}
-            #addToQueueBtn {{
+            #rowActionBtn {{
                 background-color: {c['bg_elevated']};
                 border: 1px solid {c['border']};
                 border-radius: 4px;
                 color: {c['text_secondary']};
                 font-size: {f['size_xs']}px;
-                padding: 3px 10px;
+                padding: 3px 6px;
             }}
-            #addToQueueBtn:hover {{
+            #rowActionBtn:hover {{
                 color: {c['text_primary']};
                 border-color: {c['text_secondary']};
             }}
@@ -192,25 +211,32 @@ class TrackRow(QWidget):
 
     # ── button ────────────────────────────────────────────────────────────────
 
-    def _on_btn_clicked(self) -> None:
+    def _on_queue_btn_clicked(self) -> None:
         self.queue_clicked.emit(self._track)
 
+    def _on_playlist_btn_clicked(self) -> None:
+        self.playlist_clicked.emit(self._track)
+
     def _reposition_btn(self) -> None:
-        x = self.width() - 8 - _BTN_W
+        x = self.width() - 8 - (_BTN_W * 2) - _BTN_GAP
         y = (ROW_HEIGHT - _BTN_H) // 2
-        self._btn.setGeometry(x, y, _BTN_W, _BTN_H)
+        self._queue_btn.setGeometry(x, y, _BTN_W, _BTN_H)
+        self._playlist_btn.setGeometry(x + _BTN_W + _BTN_GAP, y, _BTN_W, _BTN_H)
 
     def enterEvent(self, event) -> None:
         super().enterEvent(event)
         self._reposition_btn()
-        self._btn.show()
-        self._btn.raise_()
+        self._queue_btn.show()
+        self._playlist_btn.show()
+        self._queue_btn.raise_()
+        self._playlist_btn.raise_()
 
     def leaveEvent(self, event) -> None:
         super().leaveEvent(event)
-        self._btn.hide()
+        self._queue_btn.hide()
+        self._playlist_btn.hide()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if self._btn.isVisible():
+        if self._queue_btn.isVisible() or self._playlist_btn.isVisible():
             self._reposition_btn()

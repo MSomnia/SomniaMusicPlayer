@@ -3,6 +3,7 @@ import asyncio
 import sys
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWebEngineWidgets import QWebEngineView  # noqa: F401 — must precede QApplication
+from PyQt6.QtGui import QImageReader
 import qasync
 from core.app_controller import AppController
 from ui.app_window import MainWindow
@@ -29,6 +30,7 @@ async def _run(app: QApplication) -> None:
 
 
 def main() -> None:
+    QImageReader.setAllocationLimit(1024)  # raise Qt 6 default 256 MB → 1 GB
     app = QApplication(sys.argv)
     app.setApplicationName("SomniaMusicPlayer")
     app.setApplicationVersion("0.1.0")
