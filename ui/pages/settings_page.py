@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QCheckBox, QFrame, QPushButton, QLineEdit, QFileDialog,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSignalBlocker
 from ui.theme import COLORS, FONTS
 
 _PLATFORMS = [
@@ -33,6 +33,7 @@ class SettingsPage(QWidget):
         )
         ctrl.profile_changed.connect(self._on_profile_changed)
         ctrl.background_changed.connect(self._on_background_changed)
+        ctrl.volume_changed.connect(self._on_volume_synced)
 
     # ── construction ──────────────────────────────────────────────────────────
 
@@ -190,32 +191,44 @@ class SettingsPage(QWidget):
         btn.setObjectName("accountBtnLogin")
         btn.setFixedWidth(88)
 
+        confirm_btn = QPushButton("确认退出")
+        confirm_btn.setObjectName("accountBtnLogoutConfirm")
+        confirm_btn.setFixedWidth(88)
+        confirm_btn.hide()
+
         hbox.addWidget(name_lbl)
         hbox.addWidget(status_lbl)
         hbox.addStretch()
         hbox.addWidget(btn)
+        hbox.addWidget(confirm_btn)
 
         btn.clicked.connect(lambda: asyncio.ensure_future(self._login(pid)))
 
-        return {"layout": hbox, "status": status_lbl, "btn": btn}
+        return {
+            "layout": hbox,
+            "status": status_lbl,
+            "btn": btn,
+            "confirm_btn": confirm_btn,
+        }
 
     def _set_row_authed(self, pid: str, authed: bool, username: str | None = None) -> None:
         row = self._platform_rows.get(pid)
         if not row:
             return
         btn: QPushButton = row["btn"]
+        confirm_btn: QPushButton = row["confirm_btn"]
         status: QLabel = row["status"]
-        try:
-            btn.clicked.disconnect()
-        except RuntimeError:
-            pass
+        self._disconnect_button(btn)
+        self._disconnect_button(confirm_btn)
+        confirm_btn.hide()
         if authed:
             text = "已登录" + (f" · {username}" if username else "")
             status.setText(text)
             status.setProperty("class", "authed")
             btn.setText("退出登录")
             btn.setObjectName("accountBtnLogout")
-            btn.clicked.connect(lambda: asyncio.ensure_future(self._logout(pid)))
+            btn.clicked.connect(lambda: self._show_logout_confirm(pid))
+            confirm_btn.clicked.connect(lambda: asyncio.ensure_future(self._logout(pid)))
         else:
             status.setText("未登录")
             status.setProperty("class", "")
@@ -223,10 +236,48 @@ class SettingsPage(QWidget):
             btn.setObjectName("accountBtnLogin")
             btn.clicked.connect(lambda: asyncio.ensure_future(self._login(pid)))
         # Force style refresh after objectName change
-        btn.style().unpolish(btn)
-        btn.style().polish(btn)
+        self._refresh_button_style(btn)
+        self._refresh_button_style(confirm_btn)
         status.style().unpolish(status)
         status.style().polish(status)
+
+    def _disconnect_button(self, btn: QPushButton) -> None:
+        try:
+            btn.clicked.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+    def _refresh_button_style(self, btn: QPushButton) -> None:
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)
+
+    def _show_logout_confirm(self, pid: str) -> None:
+        row = self._platform_rows.get(pid)
+        if not row:
+            return
+        btn: QPushButton = row["btn"]
+        confirm_btn: QPushButton = row["confirm_btn"]
+        self._disconnect_button(btn)
+        btn.setText("取消")
+        btn.setObjectName("accountBtnLogout")
+        btn.clicked.connect(lambda: self._hide_logout_confirm(pid))
+        confirm_btn.show()
+        self._refresh_button_style(btn)
+        self._refresh_button_style(confirm_btn)
+
+    def _hide_logout_confirm(self, pid: str) -> None:
+        row = self._platform_rows.get(pid)
+        if not row:
+            return
+        btn: QPushButton = row["btn"]
+        confirm_btn: QPushButton = row["confirm_btn"]
+        self._disconnect_button(btn)
+        btn.setText("退出登录")
+        btn.setObjectName("accountBtnLogout")
+        btn.clicked.connect(lambda: self._show_logout_confirm(pid))
+        confirm_btn.hide()
+        self._refresh_button_style(btn)
+        self._refresh_button_style(confirm_btn)
 
     def _apply_styles(self) -> None:
         c, f = COLORS, FONTS
@@ -350,6 +401,18 @@ class SettingsPage(QWidget):
                 color: {c['text_primary']};
                 border-color: {c['text_secondary']};
             }}
+            QPushButton#accountBtnLogoutConfirm {{
+                background-color: #FF4444;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                font-size: {f['size_xs']}px;
+                font-weight: bold;
+                padding: 4px 12px;
+            }}
+            QPushButton#accountBtnLogoutConfirm:hover {{
+                background-color: #FF6B6B;
+            }}
         """)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
@@ -448,6 +511,11 @@ class SettingsPage(QWidget):
     def _on_background_changed(self, path: str) -> None:
         if self._background_image_input.text().strip() != path:
             self._background_image_input.setText(path)
+
+    def _on_volume_synced(self, value: int) -> None:
+        with QSignalBlocker(self._volume_slider):
+            self._volume_slider.setValue(value)
+        self._volume_value.setText(str(value))
 
     def _choose_background_image(self) -> None:
         path, _filter = QFileDialog.getOpenFileName(

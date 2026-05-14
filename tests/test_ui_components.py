@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 from PyQt6.QtWidgets import QApplication, QSizePolicy
 from PyQt6.QtGui import QColor, QImage
@@ -6,9 +7,10 @@ from ui.components.now_playing_bar import NowPlayingBar
 from ui.app_window import MainWindow
 from core.models import PlayerState
 from ui.theme import COLORS
+from ui.pages.settings_page import SettingsPage
 from ui.pages.standby_page import StandbyPage
 from unittest.mock import MagicMock
-from PyQt6.QtCore import QObject, pyqtSignal, Qt
+from PyQt6.QtCore import QBuffer, QIODevice, QObject, pyqtSignal, Qt
 
 
 class _MockCtrl(QObject):
@@ -29,6 +31,7 @@ class _MockCtrl(QObject):
     settings_ready = pyqtSignal(dict)
     profile_changed = pyqtSignal(str)
     background_changed = pyqtSignal(str)
+    volume_changed = pyqtSignal(int)
     artist_ready = pyqtSignal(object)
     artist_tracks_ready = pyqtSignal(list)
     is_netease_authenticated = False
@@ -39,6 +42,10 @@ class _MockCtrl(QObject):
     queue_tracks: list = []
     queue_index: int = -1
 
+    def __init__(self):
+        super().__init__()
+        self.logged_out: list[str] = []
+
     @property
     def current_state(self):
         from core.models import PlayerState
@@ -46,7 +53,7 @@ class _MockCtrl(QObject):
 
     def toggle_play_pause(self): pass
     def seek(self, ms): pass
-    def set_volume(self, v): pass
+    def set_volume(self, v): self.volume_changed.emit(v)
     def toggle_shuffle(self): pass
     def cycle_repeat_mode(self): pass
     def add_to_queue(self, track): pass
@@ -67,6 +74,16 @@ class _MockCtrl(QObject):
     async def ensure_netease_auth(self, parent=None): return False
     async def ensure_ytmusic_auth(self, parent=None): return False
     async def ensure_spotify_auth(self, parent=None): return False
+    async def logout_netease(self):
+        self.logged_out.append("netease")
+        self.netease_auth_changed.emit(False)
+    async def logout_ytmusic(self):
+        self.logged_out.append("ytmusic")
+        self.ytmusic_auth_changed.emit(False)
+    async def logout_spotify(self):
+        self.logged_out.append("spotify")
+        self.spotify_auth_changed.emit(False)
+    async def get_account_name(self, pid): return ""
 
 
 def test_sidebar_standby_signal(qapp_instance, qtbot):
@@ -169,6 +186,27 @@ def test_now_playing_bar_primary_buttons_are_visible(qapp_instance, qtbot):
     assert visible_text_pixels > 10
 
 
+def test_now_playing_cover_rounds_all_corners(qapp_instance, qtbot):
+    bar = NowPlayingBar()
+    qtbot.addWidget(bar)
+
+    image = QImage(48, 48, QImage.Format.Format_RGB32)
+    image.fill(QColor("#ff0000"))
+    buffer = QBuffer()
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    assert image.save(buffer, "PNG")
+
+    bar.set_cover_pixmap_from_bytes(bytes(buffer.data()))
+    rendered = bar._cover.pixmap().toImage().convertToFormat(
+        QImage.Format.Format_ARGB32,
+    )
+
+    for point in ((0, 0), (47, 0), (0, 47), (47, 47)):
+        assert rendered.pixelColor(*point).alpha() == 0
+    for point in ((6, 0), (0, 6), (41, 0), (47, 6), (6, 47), (47, 41)):
+        assert rendered.pixelColor(*point).alpha() > 0
+
+
 def test_main_window_title(qapp_instance, qtbot):
     w = MainWindow(_MockCtrl())
     qtbot.addWidget(w)
@@ -181,6 +219,51 @@ def test_main_window_has_sidebar_and_bar(qapp_instance, qtbot):
     assert w.sidebar is not None
     assert w.now_playing is not None
     assert w.content is not None
+
+
+def test_main_window_syncs_volume_between_bar_and_settings(qapp_instance, qtbot):
+    ctrl = _MockCtrl()
+    w = MainWindow(ctrl)
+    qtbot.addWidget(w)
+
+    w.now_playing._volume.setValue(33)
+    qapp_instance.processEvents()
+
+    assert w._settings_page._volume_slider.value() == 33
+    assert w._settings_page._volume_value.text() == "33"
+
+    w._settings_page._volume_slider.setValue(81)
+    qapp_instance.processEvents()
+
+    assert w.now_playing._volume.value() == 81
+
+
+async def test_settings_logout_requires_confirmation(qapp_instance, qtbot):
+    ctrl = _MockCtrl()
+    page = SettingsPage(ctrl)
+    qtbot.addWidget(page)
+    page._set_row_authed("netease", True, "Alice")
+    row = page._platform_rows["netease"]
+
+    row["btn"].click()
+    await asyncio.sleep(0)
+
+    assert ctrl.logged_out == []
+    assert row["btn"].text() == "取消"
+    assert not row["confirm_btn"].isHidden()
+
+    row["btn"].click()
+    await asyncio.sleep(0)
+
+    assert ctrl.logged_out == []
+    assert row["btn"].text() == "退出登录"
+    assert row["confirm_btn"].isHidden()
+
+    row["btn"].click()
+    row["confirm_btn"].click()
+    await asyncio.sleep(0)
+
+    assert ctrl.logged_out == ["netease"]
 
 
 def test_main_window_uses_black_gaps_around_sidebar_and_content(qapp_instance, qtbot):

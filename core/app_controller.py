@@ -87,6 +87,7 @@ class AppController(QObject):
     settings_ready = pyqtSignal(dict)
     profile_changed = pyqtSignal(str)
     background_changed = pyqtSignal(str)
+    volume_changed = pyqtSignal(int)
     artist_ready = pyqtSignal(object)         # Artist
     artist_tracks_ready = pyqtSignal(list)    # list[Track]
 
@@ -589,9 +590,11 @@ class AppController(QObject):
             await self.play_track(prev)
 
     def set_volume(self, v: int) -> None:
-        self._vlc.set_volume(v)
-        self._librespot.set_volume(v)
-        asyncio.ensure_future(self._repo.set_setting("volume", str(v)))
+        volume = max(0, min(int(v), 100))
+        self._vlc.set_volume(volume)
+        self._librespot.set_volume(volume)
+        self.volume_changed.emit(volume)
+        asyncio.ensure_future(self._repo.set_setting("volume", str(volume)))
 
     async def get_initial_volume(self) -> int:
         val = await self._repo.get_setting("volume")

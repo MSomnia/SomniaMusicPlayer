@@ -24,11 +24,15 @@ class _FakeVLC(QObject):
     end_reached = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
+    def __init__(self):
+        super().__init__()
+        self.volume = None
+
     def play(self, url, vlc_options=None): self._last_url = url
     def pause(self): pass
     def stop(self): pass
     def seek(self, ms): pass
-    def set_volume(self, v): pass
+    def set_volume(self, v): self.volume = v
     def get_position_ms(self): return 0
 
 
@@ -256,3 +260,16 @@ async def test_spotify_transport_controls_use_librespot(ctrl, fake_librespot):
 
     assert fake_librespot.seeked == 15_000
     assert fake_librespot.volume == 42
+
+
+async def test_set_volume_clamps_persists_and_emits(ctrl, fake_vlc, fake_librespot):
+    received = []
+    ctrl.volume_changed.connect(received.append)
+
+    ctrl.set_volume(142)
+    await asyncio.sleep(0)
+
+    assert fake_vlc.volume == 100
+    assert fake_librespot.volume == 100
+    assert received == [100]
+    ctrl._repo.set_setting.assert_awaited_with("volume", "100")

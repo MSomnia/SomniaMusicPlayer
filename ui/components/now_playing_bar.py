@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSlider,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
-from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
+from PyQt6.QtCore import Qt, QPoint, QRect, QRectF, QSignalBlocker, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QCursor
 from ui.theme import COLORS, FONTS
 from core.models import PlayerState
 
@@ -216,7 +216,7 @@ class NowPlayingBar(QWidget):
                 background: transparent;
             }}
             #coverThumb {{
-                background-color: {c['bg_elevated']};
+                background-color: transparent;
                 border-radius: 6px;
                 border: 2px solid transparent;
             }}
@@ -340,7 +340,8 @@ class NowPlayingBar(QWidget):
             self._progress.setValue(int(position_ms / self._duration_ms * 10_000))
 
     def set_volume(self, volume: int) -> None:
-        self._volume.setValue(volume)
+        with QSignalBlocker(self._volume):
+            self._volume.setValue(volume)
 
     def set_lyrics_active(self, active: bool) -> None:
         self._lyrics_btn.setChecked(active)
@@ -361,13 +362,13 @@ class NowPlayingBar(QWidget):
             y = (px.height() - 48) // 2
             px = px.copy(x, y, 48, 48)
         # Round corners to match CSS border-radius: 6px
-        rounded = QPixmap(48, 48)
+        rounded = QImage(48, 48, QImage.Format.Format_ARGB32_Premultiplied)
         rounded.fill(Qt.GlobalColor.transparent)
         painter = QPainter(rounded)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(0, 0, 48, 48, 6, 6)
+        path.addRoundedRect(QRectF(0, 0, 48, 48), 6, 6)
         painter.setClipPath(path)
         painter.drawPixmap(0, 0, px)
         painter.end()
-        self._cover.setPixmap(rounded)
+        self._cover.setPixmap(QPixmap.fromImage(rounded))

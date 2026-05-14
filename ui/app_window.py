@@ -259,6 +259,7 @@ class MainWindow(QMainWindow):
         ctrl.state_changed.connect(self._on_state_changed)
         ctrl.position_changed.connect(self.now_playing.update_position)
         ctrl.position_changed.connect(self._lyrics_view.update_position)
+        ctrl.volume_changed.connect(self.now_playing.set_volume)
 
         # Auth status → sidebar
         ctrl.netease_auth_changed.connect(

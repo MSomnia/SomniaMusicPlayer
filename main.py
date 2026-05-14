@@ -14,8 +14,7 @@ async def _run(app: QApplication) -> None:
 
     window = MainWindow(ctrl)
     volume = await ctrl.get_initial_volume()
-    window.now_playing.set_volume(volume)
-    ctrl._vlc.set_volume(volume)
+    ctrl.set_volume(volume)
 
     window.show()
 
