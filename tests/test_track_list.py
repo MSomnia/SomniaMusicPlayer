@@ -28,12 +28,6 @@ def test_set_tracks_populates_list(qapp, qtbot):
     assert w._list.count() == 3
 
 
-def test_set_tracks_text_contains_title(qapp, qtbot):
-    w = TrackListWidget()
-    qtbot.addWidget(w)
-    w.set_tracks([_t("abc")])
-    assert "Song abc" in w._list.item(0).text()
-
 
 def test_set_tracks_stores_track_in_item(qapp, qtbot):
     w = TrackListWidget()

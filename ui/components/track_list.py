@@ -9,6 +9,7 @@ from ui.theme import COLORS, FONTS, scrollbar_qss
 class TrackListWidget(QWidget):
     track_selected  = pyqtSignal(object)  # Track — double-click to play
     queue_requested = pyqtSignal(object)  # Track — 加入队列 button
+    playlist_requested = pyqtSignal(object)  # Track — 加入歌单 button
     artist_clicked  = pyqtSignal(object)  # Track — artist label clicked
 
     def __init__(self, parent=None) -> None:
@@ -42,12 +43,13 @@ class TrackListWidget(QWidget):
         self._status_label.hide()
         self._list.show()
         for track in tracks:
-            item = QListWidgetItem(track.title)
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, track)
             item.setSizeHint(QSize(0, ROW_HEIGHT))
             self._list.addItem(item)
             row = TrackRow(track)
             row.queue_clicked.connect(self.queue_requested)
+            row.playlist_clicked.connect(self.playlist_requested)
             row.artist_clicked.connect(self.artist_clicked)
             self._list.setItemWidget(item, row)
 
