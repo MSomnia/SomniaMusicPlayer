@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem,
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
 from ui.theme import COLORS, FONTS, scrollbar_qss
 from ui.components.track_row import TrackRow, ROW_HEIGHT
@@ -73,16 +73,16 @@ class ArtistPage(QWidget):
         # ── Track list ────────────────────────────────────────────────────────
         self._list = QListWidget()
         self._list.setObjectName("artistTrackList")
-        self._list.setSpacing(0)
         self._list.setFrameShape(QListWidget.Shape.NoFrame)
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
-        self._list.setStyleSheet(scrollbar_qss() + """
-            QListWidget { background: transparent; border: none; outline: none; }
-            QListWidget::item { padding: 0; border: none; }
-            QListWidget::item:selected { background: transparent; }
-            QListWidget::item:hover { background-color: rgba(255,255,255,0.05); border-radius: 8px; }
+        c = COLORS
+        self._list.setStyleSheet(scrollbar_qss() + f"""
+            QListWidget {{ background: transparent; border: none; outline: none; }}
+            QListWidget::item {{ padding: 2px 4px; border-radius: 8px; }}
+            QListWidget::item:hover {{ background-color: {c['bg_hover']}; border-radius: 8px; }}
+            QListWidget::item:selected {{ background-color: {c['bg_elevated']}; border-radius: 8px; }}
         """)
         layout.addWidget(self._list, stretch=1)
 
@@ -139,7 +139,7 @@ class ArtistPage(QWidget):
             row.queue_clicked.connect(self.queue_track)
             row.artist_clicked.connect(self.artist_clicked)
             item = QListWidgetItem(self._list)
-            item.setSizeHint(row.sizeHint())
+            item.setSizeHint(QSize(0, ROW_HEIGHT))
             item.setData(Qt.ItemDataRole.UserRole, track)
             self._list.setItemWidget(item, row)
 
