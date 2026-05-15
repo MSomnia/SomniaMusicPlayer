@@ -121,7 +121,7 @@ class AppController(QObject):
         self._library_cache: dict[str, tuple[float, list]] = {}
         # "platform:playlist_id" → (timestamp, tracks)
         self._tracks_cache: dict[str, tuple[float, list]] = {}
-        self._display_name = "Somnia"
+        self._display_name = "Omnia"
         self._background_image_path = DEFAULT_BACKGROUND_IMAGE_PATH
         self.last_playlist_error = ""
         self._prefetch_task: asyncio.Task | None = None
@@ -189,7 +189,7 @@ class AppController(QObject):
 
     async def init(self) -> None:
         await self._repo.init()
-        self._display_name = (await self._repo.get_setting("display_name")) or "Somnia"
+        self._display_name = (await self._repo.get_setting("display_name")) or "Omnia"
         saved_background = (
             await self._repo.get_setting("background_image_path")
         ) or DEFAULT_BACKGROUND_IMAGE_PATH
@@ -937,7 +937,7 @@ class AppController(QObject):
 
     async def save_setting(self, key: str, value: str) -> None:
         if key == "display_name":
-            value = value.strip() or "Somnia"
+            value = value.strip() or "Omnia"
             self._display_name = value
         elif key == "background_image_path":
             value = value.strip() or DEFAULT_BACKGROUND_IMAGE_PATH

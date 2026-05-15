@@ -35,7 +35,7 @@ class SidebarWidget(QWidget):
         self._nav_buttons: dict[str, QPushButton] = {}
         self._platform_buttons: dict[str, QPushButton] = {}
         self._platform_names: dict[str, str] = {}
-        self._display_name = "Somnia"
+        self._display_name = "Omnia"
         self._setup_ui()
         self._apply_styles()
 
@@ -212,7 +212,7 @@ class SidebarWidget(QWidget):
             btn.setText(f"○  {name}")
 
     def set_display_name(self, name: str) -> None:
-        self._display_name = name.strip() or "Somnia"
+        self._display_name = name.strip() or "Omnia"
         self._refresh_title()
 
     def _refresh_title(self) -> None:

@@ -83,7 +83,7 @@ class SettingsPage(QWidget):
         profile_row.addWidget(self._setting_label("昵称"))
         self._display_name_input = QLineEdit()
         self._display_name_input.setObjectName("displayNameInput")
-        self._display_name_input.setPlaceholderText("Somnia")
+        self._display_name_input.setPlaceholderText("Omnia")
         self._display_name_input.setMaxLength(24)
         self._display_name_input.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self._display_name_input.returnPressed.connect(self._save_display_name)
@@ -653,7 +653,7 @@ class SettingsPage(QWidget):
     def _on_settings_ready(self, settings: dict) -> None:
         self._loading = True
         try:
-            self._display_name_input.setText(settings.get("display_name") or "Somnia")
+            self._display_name_input.setText(settings.get("display_name") or "Omnia")
             self._background_image_input.setText(
                 settings.get("background_image_path") or ""
             )
@@ -702,7 +702,7 @@ class SettingsPage(QWidget):
     def _save_display_name(self) -> None:
         if self._loading:
             return
-        name = self._display_name_input.text().strip() or "Somnia"
+        name = self._display_name_input.text().strip() or "Omnia"
         self._display_name_input.setText(name)
         asyncio.ensure_future(self._ctrl.save_setting("display_name", name))
 

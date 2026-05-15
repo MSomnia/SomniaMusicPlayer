@@ -29,3 +29,7 @@ env/
 # Local planning scratchpad
 spec.md
 .superpowers/
+docs/superpowers/
+tests/
+pytest.ini
+todo.md

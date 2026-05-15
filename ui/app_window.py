@@ -701,7 +701,7 @@ class MainWindow(QMainWindow):
         self.sidebar.set_platform_status("netease", ctrl.is_netease_authenticated)
         self.sidebar.set_platform_status("ytmusic", ctrl.is_ytmusic_authenticated)
         self.sidebar.set_platform_status("spotify", ctrl.is_spotify_authenticated)
-        self.sidebar.set_display_name(getattr(ctrl, "display_name", "Somnia"))
+        self.sidebar.set_display_name(getattr(ctrl, "display_name", "Omnia"))
         self._app_root.set_background_image(
             getattr(ctrl, "background_image_path", "")
         )

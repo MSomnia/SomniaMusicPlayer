@@ -1,6 +1,7 @@
 from __future__ import annotations
 import io
 import logging
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -31,9 +32,11 @@ class LibrespotBridge:
     def __init__(self, creds_path: str) -> None:
         self._creds_path = creds_path
         self._session: "Session | None" = None
+        self._lock = threading.Lock()
 
     def has_session(self) -> bool:
-        return self._session is not None
+        with self._lock:
+            return self._session is not None
 
     def create_session(
         self,
@@ -57,14 +60,16 @@ class LibrespotBridge:
 
         if Path(self._creds_path).exists():
             logger.info("Librespot: loading stored credentials from %s", self._creds_path)
-            self._session = builder.stored_file().create()
+            session = builder.stored_file().create()
         elif username and password:
             logger.info("Librespot: authenticating with username/password")
-            self._session = builder.user_pass(username, password).create()
+            session = builder.user_pass(username, password).create()
         else:
             raise RuntimeError(
                 "No librespot credentials found. Login with username and password first."
             )
+        with self._lock:
+            self._session = session
 
     def create_session_with_token(self, access_token: str) -> None:
         """Create a librespot Session using an existing Spotify Web API access token.
@@ -93,23 +98,44 @@ class LibrespotBridge:
             auth_data=access_token.encode("utf-8"),
         )
         logger.info("Librespot: authenticating with sp_dc access token")
-        self._session = builder.create()
+        session = builder.create()
+        with self._lock:
+            self._session = session
 
     def load_track(self, track_id_str: str) -> tuple[np.ndarray, int]:
         """Decrypt and decode a Spotify track → (float32 array, samplerate).
 
         Downloads the full track before returning (download-then-play model).
         Raises RuntimeError if no session or decode fails.
+        Auto-reconnects once if the session has been dropped by the AP server.
         """
-        if self._session is None:
-            raise RuntimeError("No session — call create_session() first")
         if not _LIBRESPOT_AVAILABLE:
             raise RuntimeError("librespot-python not installed")
         if sf is None:
             raise RuntimeError("soundfile not installed — cannot decode Ogg Vorbis")
 
+        for attempt in range(2):
+            with self._lock:
+                session = self._session
+            if session is None:
+                raise RuntimeError("No session — call create_session() first")
+            try:
+                return self._do_load_track(session, track_id_str)
+            except Exception as exc:
+                if attempt == 0 and self._is_connection_error(exc):
+                    logger.warning(
+                        "Librespot session disconnected (attempt %d): %s — reconnecting",
+                        attempt + 1, exc,
+                    )
+                    self._invalidate_and_reconnect()
+                    continue
+                raise
+
+        raise RuntimeError("load_track: unreachable")  # pragma: no cover
+
+    def _do_load_track(self, session: "Session", track_id_str: str) -> tuple[np.ndarray, int]:
         tid = TrackId.from_uri(f"spotify:track:{track_id_str}")
-        loaded = self._session.content_feeder().load(
+        loaded = session.content_feeder().load(
             tid,
             VorbisOnlyAudioQuality(AudioQuality.HIGH),
             False,
@@ -129,7 +155,6 @@ class LibrespotBridge:
             samplerate = f.samplerate
             audio_data = f.read(dtype="float32")
 
-        # Ensure 2D (frames, channels)
         if audio_data.ndim == 1:
             audio_data = audio_data.reshape(-1, 1)
 
@@ -138,6 +163,28 @@ class LibrespotBridge:
             track_id_str, len(audio_data), samplerate, audio_data.shape[1],
         )
         return audio_data, samplerate
+
+    @staticmethod
+    def _is_connection_error(exc: BaseException) -> bool:
+        if isinstance(exc, (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, OSError)):
+            return True
+        msg = str(exc).lower()
+        return any(k in msg for k in ("failed to receive packet", "connection reset", "connection refused", "broken pipe", "socket"))
+
+    def _invalidate_and_reconnect(self) -> None:
+        """Close the broken session and recreate it from stored credentials."""
+        with self._lock:
+            old_session = self._session
+            self._session = None
+        if old_session is not None:
+            try:
+                old_session.close()
+            except Exception:
+                pass
+        if not Path(self._creds_path).exists():
+            raise RuntimeError("Librespot session dropped and no stored credentials to reconnect with")
+        logger.info("Librespot: reconnecting from stored credentials")
+        self.create_session()
 
     @staticmethod
     def _patch_oauth_server_reuse_port() -> None:
@@ -174,12 +221,16 @@ class LibrespotBridge:
             .set_stored_credential_file(self._creds_path)
             .build()
         )
-        self._session = Session.Builder(conf=conf).oauth(url_callback).create()
+        session = Session.Builder(conf=conf).oauth(url_callback).create()
+        with self._lock:
+            self._session = session
 
     def close(self) -> None:
-        if self._session is not None:
+        with self._lock:
+            session = self._session
+            self._session = None
+        if session is not None:
             try:
-                self._session.close()
+                session.close()
             except Exception:
                 pass
-            self._session = None

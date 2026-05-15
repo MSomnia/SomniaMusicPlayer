@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_STATUS_VISIBLE_TEXT_CHARS = 15
+_STATUS_VISIBLE_TEXT_CHARS = 12
 _STATUS_SCROLL_INTERVAL_MS = 500
 _STATUS_SCROLL_GAP = "   "
 # Fixed pixel width for the status item — prevents resizing during marquee scroll.

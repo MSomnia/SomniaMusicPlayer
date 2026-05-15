@@ -1,4 +1,4 @@
-"""Git-based auto-updater for SomniaMusicPlayer."""
+"""Git-based auto-updater for Omnia."""
 from __future__ import annotations
 import asyncio
 import logging
