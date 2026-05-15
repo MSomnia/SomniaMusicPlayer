@@ -233,7 +233,7 @@ def test_now_playing_cover_rounds_all_corners(qapp_instance, qtbot):
 def test_main_window_title(qapp_instance, qtbot):
     w = MainWindow(_MockCtrl())
     qtbot.addWidget(w)
-    assert w.windowTitle() == "SomniaMusicPlayer"
+    assert w.windowTitle() == "Omnia"
 
 
 def test_main_window_has_sidebar_and_bar(qapp_instance, qtbot):
@@ -272,7 +272,7 @@ def test_main_window_menu_uses_existing_actions(qapp_instance, qtbot):
         action.text().replace("&", "")
         for action in _menu_bar_for(w).actions()
     ]
-    assert "SomniaMusicPlayer" in menu_titles
+    assert "Omnia" in menu_titles
     assert "View" in menu_titles
     assert "Playback" in menu_titles
     assert "Window" in menu_titles

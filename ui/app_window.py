@@ -38,13 +38,24 @@ _INPUT_TYPES = (QLineEdit, QTextEdit, QPlainTextEdit)
 
 
 class _GlobalKeyFilter(QObject):
-    """App-level event filter: intercepts Space before any widget consumes it."""
+    """App-level event filter: intercepts Space and tracks user activity."""
+
+    activity = pyqtSignal()
+
+    _ACTIVITY_EVENTS = frozenset({
+        QEvent.Type.MouseMove,
+        QEvent.Type.MouseButtonPress,
+        QEvent.Type.KeyPress,
+        QEvent.Type.Wheel,
+    })
 
     def __init__(self, ctrl) -> None:
         super().__init__()
         self._ctrl = ctrl
 
     def eventFilter(self, obj, event) -> bool:
+        if event.type() in self._ACTIVITY_EVENTS:
+            self.activity.emit()
         if event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Space:
                 focus = QApplication.focusWidget()
@@ -401,7 +412,7 @@ class MainWindow(QMainWindow):
             )
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._ctrl = ctrl
-        self.setWindowTitle("SomniaMusicPlayer")
+        self.setWindowTitle("Omnia")
         self.setMinimumSize(900, 600)
         self._setup_menu_bar()
         self._setup_ui()
@@ -410,8 +421,16 @@ class MainWindow(QMainWindow):
         self.sidebar.set_active_page("home")
         self._dark_titlebar_done = False
         self._preload_scheduled = False
+        self._auto_update_enabled = True
         self._key_filter = _GlobalKeyFilter(ctrl)
         QApplication.instance().installEventFilter(self._key_filter)
+
+        self._idle_timeout_ms: int = 5 * 60 * 1000  # default 5 min
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.timeout.connect(self._on_idle_timeout)
+        self._key_filter.activity.connect(self._reset_idle_timer)
+        self._idle_timer.start(self._idle_timeout_ms)
 
     def changeEvent(self, event) -> None:  # type: ignore[override]
         super().changeEvent(event)
@@ -432,6 +451,9 @@ class MainWindow(QMainWindow):
         if not self._preload_scheduled:
             self._preload_scheduled = True
             QTimer.singleShot(800, self._preload_authenticated_platforms)
+            # Show local version immediately, then auto-check after 15 s
+            self._settings_page.init_version_label()
+            QTimer.singleShot(15_000, self._schedule_auto_update_check)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -557,7 +579,7 @@ class MainWindow(QMainWindow):
     def _show_help_dialog(self) -> None:
         QMessageBox.information(
             self,
-            "SomniaMusicPlayer Help",
+            "Omnia Help",
             "Use the sidebar and bottom playback bar as usual. The menu mirrors "
             "the same navigation and playback controls.",
         )
@@ -655,6 +677,9 @@ class MainWindow(QMainWindow):
         )
         ctrl.profile_changed.connect(self.sidebar.set_display_name)
         ctrl.background_changed.connect(self._app_root.set_background_image)
+        ctrl.settings_ready.connect(self._apply_standby_timeout_setting)
+        ctrl.settings_ready.connect(self._apply_auto_update_setting)
+        ctrl.update_status_ready.connect(self._on_update_status_for_auto)
 
         # Sidebar standby toggle
         self.sidebar.standby_requested.connect(self._toggle_standby)
@@ -920,12 +945,58 @@ class MainWindow(QMainWindow):
     def _toggle_standby(self) -> None:
         if self._standby_page.isVisible():
             self._standby_page.leave()
+            self._reset_idle_timer()
         else:
             self._standby_page.enter()
+            self._idle_timer.stop()
+
+    def _reset_idle_timer(self) -> None:
+        if self._idle_timeout_ms > 0 and not self._standby_page.isVisible():
+            self._idle_timer.start(self._idle_timeout_ms)
+
+    def _on_idle_timeout(self) -> None:
+        if not self._standby_page.isVisible():
+            self._standby_page.enter()
+
+    def _apply_standby_timeout_setting(self, settings: dict) -> None:
+        minutes = int(settings.get("auto_standby_minutes") or 5)
+        self._idle_timeout_ms = minutes * 60 * 1000
+        if self._idle_timeout_ms > 0:
+            self._idle_timer.start(self._idle_timeout_ms)
+        else:
+            self._idle_timer.stop()
+
+    def _apply_auto_update_setting(self, settings: dict) -> None:
+        self._auto_update_enabled = (
+            settings.get("auto_update") or "true"
+        ).lower() == "true"
+
+    def _schedule_auto_update_check(self) -> None:
+        asyncio.ensure_future(self._ctrl.check_for_update())
+
+    def _on_update_status_for_auto(self, status) -> None:
+        if not status.available or not getattr(self, "_auto_update_enabled", True):
+            return
+        msgs = "\n".join(f"• {m}" for m in status.commit_messages) if status.commit_messages else ""
+        body = f"发现新版本（{status.remote_short}），是否立即更新并重启？"
+        if msgs:
+            body += f"\n\n{msgs}"
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("发现新版本")
+        dlg.setText(body)
+        dlg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        dlg.setDefaultButton(QMessageBox.StandardButton.Yes)
+        dlg.button(QMessageBox.StandardButton.Yes).setText("立即更新")
+        dlg.button(QMessageBox.StandardButton.No).setText("稍后再说")
+        if dlg.exec() == QMessageBox.StandardButton.Yes:
+            asyncio.ensure_future(self._ctrl.apply_update())
 
     # ── styling ───────────────────────────────────────────────────────────────
 
     def _apply_styles(self) -> None:
+        c = COLORS
         self.setStyleSheet(f"""
             QMainWindow, #appRoot {{
                 background-color: #000000;
@@ -937,5 +1008,21 @@ class MainWindow(QMainWindow):
                 background-color: transparent;
                 border-radius: 8px;
                 border: none;
+            }}
+        """)
+        QApplication.instance().setStyleSheet(f"""
+            QAbstractItemView {{
+                background-color: {c['bg_elevated']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border']};
+                outline: 0;
+                padding: 2px;
+            }}
+            QAbstractItemView::item:selected {{
+                background-color: {c['accent']};
+                color: #000000;
+            }}
+            QAbstractItemView::item:hover {{
+                background-color: {c['bg_surface']};
             }}
         """)

@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QSlider,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QPoint, QRect, QRectF, QSignalBlocker, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QCursor
+from PyQt6.QtCore import Qt, QPoint, QRect, QSignalBlocker, pyqtSignal
+from PyQt6.QtGui import QPixmap, QCursor
 from ui.theme import COLORS, FONTS
 from core.models import PlayerState
 
@@ -218,6 +218,8 @@ class NowPlayingBar(QWidget):
 
     def _apply_styles(self) -> None:
         c, f = COLORS, FONTS
+        control_accent = "#FFFFFF"
+        control_accent_hover = "#E6E6E6"
         self.setStyleSheet(f"""
             #nowPlayingBar {{
                 background-color: #000000;
@@ -232,11 +234,10 @@ class NowPlayingBar(QWidget):
             }}
             #coverThumb {{
                 background-color: transparent;
-                border-radius: 6px;
                 border: 2px solid transparent;
             }}
             #coverThumb:hover {{
-                border: 2px solid {c['accent']};
+                border: 2px solid {control_accent};
             }}
             #trackTitle {{
                 color: {c['text_primary']};
@@ -244,7 +245,7 @@ class NowPlayingBar(QWidget):
                 font-weight: bold;
             }}
             #trackTitle:hover {{
-                color: {c['accent']};
+                color: {control_accent};
                 text-decoration: underline;
             }}
             #trackArtist {{
@@ -263,22 +264,22 @@ class NowPlayingBar(QWidget):
                 padding: 4px 8px;
             }}
             #controlBtn:hover, #lyricsBtn:hover {{ color: {c['text_primary']}; }}
-            #controlBtn:checked, #lyricsBtn:checked {{ color: {c['accent']}; }}
+            #controlBtn:checked, #lyricsBtn:checked {{ color: {control_accent}; }}
             #playBtn {{
-                background-color: {c['accent']};
+                background-color: {control_accent};
                 border: none;
                 color: #000000;
                 font-size: 15px;
                 border-radius: 18px;
             }}
-            #playBtn:hover {{ background-color: {c['accent_dim']}; }}
+            #playBtn:hover {{ background-color: {control_accent_hover}; }}
             QSlider::groove:horizontal {{
                 height: 4px;
                 background: {c['bg_elevated']};
                 border-radius: 2px;
             }}
             QSlider::sub-page:horizontal {{
-                background: {c['accent']};
+                background: {control_accent};
                 border-radius: 2px;
             }}
             QSlider::handle:horizontal {{
@@ -364,33 +365,20 @@ class NowPlayingBar(QWidget):
         self._lyrics_btn.setChecked(active)
 
     def set_cover_pixmap_from_bytes(self, data: bytes) -> None:
-        """Scale image bytes to 48×48 with rounded corners and display."""
+        """Scale image bytes to 48×48 and display."""
         px = QPixmap()
         if not px.loadFromData(data):
             return
         dpr = self.devicePixelRatioF()
         phys = int(48 * dpr)
-        radius_phys = int(6 * dpr)
         px = px.scaled(
             phys, phys,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
-        # Crop to exact physical size from center
         if px.width() > phys or px.height() > phys:
             x = (px.width() - phys) // 2
             y = (px.height() - phys) // 2
             px = px.copy(x, y, phys, phys)
-        # Round corners to match CSS border-radius: 6px (in physical pixels)
-        rounded = QImage(phys, phys, QImage.Format.Format_ARGB32_Premultiplied)
-        rounded.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(rounded)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, phys, phys), radius_phys, radius_phys)
-        painter.setClipPath(path)
-        painter.drawPixmap(0, 0, px)
-        painter.end()
-        result = QPixmap.fromImage(rounded)
-        result.setDevicePixelRatio(dpr)
-        self._cover.setPixmap(result)
+        px.setDevicePixelRatio(dpr)
+        self._cover.setPixmap(px)

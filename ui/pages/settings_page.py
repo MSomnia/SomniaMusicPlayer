@@ -2,7 +2,8 @@ from __future__ import annotations
 import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QCheckBox, QFrame, QPushButton, QLineEdit, QFileDialog,
+    QCheckBox, QComboBox, QFrame, QPushButton, QLineEdit, QFileDialog,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QSignalBlocker
 from ui.theme import COLORS, FONTS
@@ -15,6 +16,13 @@ _PLATFORMS = [
 
 
 class SettingsPage(QWidget):
+    _STANDBY_OPTIONS: list[tuple[str, int]] = [
+        ("关闭", 0),
+        ("2 分钟", 2),
+        ("5 分钟", 5),
+        ("10 分钟", 10),
+    ]
+
     def __init__(self, ctrl, parent=None) -> None:
         super().__init__(parent)
         self._ctrl = ctrl
@@ -34,14 +42,31 @@ class SettingsPage(QWidget):
         ctrl.profile_changed.connect(self._on_profile_changed)
         ctrl.background_changed.connect(self._on_background_changed)
         ctrl.volume_changed.connect(self._on_volume_synced)
+        ctrl.update_status_ready.connect(self._on_update_status)
 
     # ── construction ──────────────────────────────────────────────────────────
 
     def _setup_ui(self) -> None:
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        layout = QVBoxLayout(self)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("settingsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        _container = QWidget()
+        _container.setObjectName("settingsContainer")
+        layout = QVBoxLayout(_container)
         layout.setContentsMargins(40, 24, 40, 24)
         layout.setSpacing(0)
+
+        scroll.setWidget(_container)
+        outer.addWidget(scroll)
 
         title = QLabel("设置")
         title.setObjectName("pageTitle")
@@ -169,6 +194,63 @@ class SettingsPage(QWidget):
         lyr_row.addWidget(self._lyrics_size_value)
         lyr_row.addStretch()
         layout.addLayout(lyr_row)
+        layout.addSpacing(12)
+
+        # Auto standby
+        standby_row = QHBoxLayout()
+        standby_row.setSpacing(10)
+        standby_row.addWidget(self._setting_label("自动待机"))
+        self._auto_standby_combo = QComboBox()
+        self._auto_standby_combo.setObjectName("standbyCombo")
+        for label, _ in self._STANDBY_OPTIONS:
+            self._auto_standby_combo.addItem(label)
+        self._auto_standby_combo.currentIndexChanged.connect(self._on_auto_standby_changed)
+        standby_row.addWidget(self._auto_standby_combo)
+        standby_row.addStretch()
+        layout.addLayout(standby_row)
+        layout.addSpacing(24)
+
+        # ── Update section ───────────────────────────────────────────────────
+        layout.addWidget(self._section_label("更新"))
+        layout.addWidget(self._make_divider())
+        layout.addSpacing(12)
+
+        # Version row
+        ver_row = QHBoxLayout()
+        ver_row.setSpacing(10)
+        ver_row.addWidget(self._setting_label("当前版本"))
+        self._version_label = QLabel("—")
+        self._version_label.setObjectName("settingValue")
+        ver_row.addWidget(self._version_label)
+        ver_row.addSpacing(16)
+        self._check_update_btn = QPushButton("检查更新")
+        self._check_update_btn.setObjectName("checkUpdateBtn")
+        self._check_update_btn.clicked.connect(self._on_check_update_clicked)
+        ver_row.addWidget(self._check_update_btn)
+        self._update_status_label = QLabel("")
+        self._update_status_label.setObjectName("updateStatusLabel")
+        ver_row.addWidget(self._update_status_label)
+        ver_row.addStretch()
+        layout.addLayout(ver_row)
+        layout.addSpacing(8)
+
+        # Auto-update + apply row
+        update_action_row = QHBoxLayout()
+        update_action_row.setSpacing(10)
+        update_action_row.addWidget(self._setting_label("自动更新"))
+        self._auto_update_check = QCheckBox()
+        self._auto_update_check.setObjectName("settingCheck")
+        self._auto_update_check.setChecked(True)
+        self._auto_update_check.stateChanged.connect(self._on_auto_update_changed)
+        update_action_row.addWidget(self._auto_update_check)
+        update_action_row.addSpacing(16)
+        self._apply_update_btn = QPushButton("立即更新并重启")
+        self._apply_update_btn.setObjectName("applyUpdateBtn")
+        self._apply_update_btn.hide()
+        self._apply_update_btn.clicked.connect(self._on_apply_update_clicked)
+        update_action_row.addWidget(self._apply_update_btn)
+        update_action_row.addStretch()
+        layout.addLayout(update_action_row)
 
         layout.addStretch()
         self._apply_styles()
@@ -433,6 +515,89 @@ class SettingsPage(QWidget):
             QPushButton#accountBtnLogoutConfirm:hover {{
                 background-color: #FF6B6B;
             }}
+            QComboBox#standbyCombo {{
+                background-color: {c['bg_elevated']};
+                border: 1px solid {c['border']};
+                border-radius: 6px;
+                color: {c['text_primary']};
+                font-size: {f['size_sm']}px;
+                padding: 5px 10px;
+                min-width: 100px;
+            }}
+            QComboBox#standbyCombo:hover {{
+                border-color: {c['text_secondary']};
+            }}
+            QComboBox#standbyCombo::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            #settingsContainer {{
+                background-color: transparent;
+            }}
+            QScrollArea#settingsScroll {{
+                background-color: transparent;
+            }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 6px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {c['border']};
+                border-radius: 3px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {c['text_secondary']};
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+            QPushButton#checkUpdateBtn {{
+                background-color: transparent;
+                color: {c['text_secondary']};
+                border: 1px solid {c['border']};
+                border-radius: 6px;
+                font-size: {f['size_xs']}px;
+                padding: 5px 14px;
+            }}
+            QPushButton#checkUpdateBtn:hover {{
+                color: {c['text_primary']};
+                border-color: {c['text_secondary']};
+            }}
+            QPushButton#checkUpdateBtn:disabled {{
+                color: {c['text_secondary']};
+                opacity: 0.5;
+            }}
+            QPushButton#applyUpdateBtn {{
+                background-color: {c['accent']};
+                color: #000;
+                border: none;
+                border-radius: 6px;
+                font-size: {f['size_xs']}px;
+                font-weight: bold;
+                padding: 5px 16px;
+            }}
+            QPushButton#applyUpdateBtn:hover {{
+                background-color: {c['accent_dim']};
+            }}
+            QPushButton#applyUpdateBtn:disabled {{
+                opacity: 0.5;
+            }}
+            QLabel#updateStatusLabel {{
+                font-size: {f['size_xs']}px;
+                color: {c['text_secondary']};
+            }}
+            QLabel#updateStatusLabel[updateState="available"] {{
+                color: {c['accent']};
+            }}
+            QLabel#updateStatusLabel[updateState="error"] {{
+                color: #FF6B6B;
+            }}
+            QLabel#updateStatusLabel[updateState="ok"] {{
+                color: {c['text_secondary']};
+            }}
         """)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
@@ -508,6 +673,14 @@ class SettingsPage(QWidget):
             lyrics_size = int(settings.get("lyrics_font_size") or 22)
             self._lyrics_size_slider.setValue(lyrics_size)
             self._lyrics_size_value.setText(str(lyrics_size))
+
+            minutes = int(settings.get("auto_standby_minutes") or 5)
+            minutes_values = [m for _, m in self._STANDBY_OPTIONS]
+            idx = minutes_values.index(minutes) if minutes in minutes_values else 2
+            self._auto_standby_combo.setCurrentIndex(idx)
+
+            auto_update = (settings.get("auto_update") or "true").lower() == "true"
+            self._auto_update_check.setChecked(auto_update)
         finally:
             self._loading = False
 
@@ -594,3 +767,61 @@ class SettingsPage(QWidget):
         if self._loading:
             return
         asyncio.ensure_future(self._ctrl.save_setting("lyrics_font_size", str(value)))
+
+    def _on_auto_standby_changed(self, index: int) -> None:
+        if self._loading:
+            return
+        _, minutes = self._STANDBY_OPTIONS[index]
+        asyncio.ensure_future(self._ctrl.save_setting("auto_standby_minutes", str(minutes)))
+
+    # ── update handlers ───────────────────────────────────────────────────────
+
+    def _on_check_update_clicked(self) -> None:
+        self._check_update_btn.setEnabled(False)
+        self._update_status_label.setText("正在检查...")
+        self._apply_update_btn.hide()
+        asyncio.ensure_future(self._ctrl.check_for_update())
+
+    def _on_apply_update_clicked(self) -> None:
+        self._apply_update_btn.setEnabled(False)
+        self._check_update_btn.setEnabled(False)
+        self._update_status_label.setText("正在更新，请稍候...")
+        asyncio.ensure_future(self._ctrl.apply_update())
+
+    def _on_auto_update_changed(self, state: int) -> None:
+        if self._loading:
+            return
+        from PyQt6.QtCore import Qt as _Qt
+        enabled = state == _Qt.CheckState.Checked.value
+        asyncio.ensure_future(self._ctrl.save_setting("auto_update", str(enabled).lower()))
+
+    def _on_update_status(self, status) -> None:
+        from PyQt6.QtCore import QTimer
+        self._check_update_btn.setEnabled(True)
+        self._version_label.setText(status.local_short)
+        if status.error and not status.available:
+            self._update_status_label.setProperty("updateState", "error")
+            self._update_status_label.setText(status.error)
+            self._apply_update_btn.hide()
+        elif status.available:
+            self._update_status_label.setProperty("updateState", "available")
+            msgs = "、".join(status.commit_messages[:3]) if status.commit_messages else ""
+            self._update_status_label.setText(f"发现新版本 {status.remote_short}" + (f"：{msgs}" if msgs else ""))
+            self._apply_update_btn.show()
+            self._apply_update_btn.setEnabled(True)
+        else:
+            self._update_status_label.setProperty("updateState", "ok")
+            self._update_status_label.setText("已是最新版本")
+            self._apply_update_btn.hide()
+        # Force style refresh after property change
+        self._update_status_label.style().unpolish(self._update_status_label)
+        self._update_status_label.style().polish(self._update_status_label)
+
+    def init_version_label(self) -> None:
+        """Called once on startup to show local commit without a full check."""
+        import asyncio as _asyncio
+        async def _set():
+            from core import updater
+            commit = await updater.get_local_commit()
+            self._version_label.setText(commit[:7] if commit else "unknown")
+        _asyncio.ensure_future(_set())

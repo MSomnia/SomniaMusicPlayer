@@ -10,9 +10,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_STATUS_VISIBLE_TEXT_CHARS = 23
+_STATUS_VISIBLE_TEXT_CHARS = 15
 _STATUS_SCROLL_INTERVAL_MS = 500
 _STATUS_SCROLL_GAP = "   "
+# Fixed pixel width for the status item — prevents resizing during marquee scroll.
+# Sized to fit prefix (♪/Ⅱ) + space + 15 chars at the menu-bar system font (~8 px/char).
+_STATUS_ITEM_WIDTH = 155.0
 
 _AVAILABLE = False
 if sys.platform == "darwin":
@@ -29,6 +32,45 @@ if sys.platform == "darwin":
         _STATUS_AVAILABLE = True
     except ImportError:
         logger.debug("PyObjC AppKit framework not available — menu bar status disabled")
+
+# NSEventMask for right mouse down (type=3 → mask=1<<3=8)
+_NSEventMaskRightMouseDown = 8
+
+if _STATUS_AVAILABLE:
+    from AppKit import NSObject  # type: ignore[import]
+
+    # Module-level dict avoids storing Python refs directly on NSObject instances,
+    # which is unreliable across PyObjC versions.
+    _menu_handlers: dict = {}
+
+    class _StatusMenuTarget(NSObject):  # type: ignore[misc]
+        """ObjC target for status-bar button clicks and menu item actions."""
+
+        def handleButtonClick_(self, sender):
+            h = _menu_handlers.get(id(self))
+            if h is not None:
+                h._show_status_context_menu()
+
+        def prevTrack_(self, sender):
+            h = _menu_handlers.get(id(self))
+            if h is not None:
+                asyncio.ensure_future(h._ctrl.play_prev())
+
+        def playPause_(self, sender):
+            h = _menu_handlers.get(id(self))
+            if h is not None:
+                h._ctrl.toggle_play_pause()
+
+        def nextTrack_(self, sender):
+            h = _menu_handlers.get(id(self))
+            if h is not None:
+                asyncio.ensure_future(h._ctrl.play_next())
+
+        def quitApp_(self, sender):
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
 
 
 def _qt_application_ready() -> bool:
@@ -60,6 +102,7 @@ class MacOSMediaHandler:
         self._status_scroll_key = ""
         self._status_scroll_offset = 0
         self._status_scroll_timer = None
+        self._menu_target = None
         if _AVAILABLE:
             self._register_commands()
 
@@ -112,6 +155,10 @@ class MacOSMediaHandler:
 
     def set_cover_data(self, data: bytes) -> None:
         self._cover_data = data
+
+    def __del__(self) -> None:
+        if _STATUS_AVAILABLE and self._menu_target is not None:
+            _menu_handlers.pop(id(self._menu_target), None)
 
     def ensure_status_item(self) -> None:
         if self._status_item is not None:
@@ -180,10 +227,19 @@ class MacOSMediaHandler:
 
     def _setup_status_item(self) -> None:
         try:
-            from AppKit import NSStatusBar, NSVariableStatusItemLength
+            from AppKit import NSStatusBar
             from PyQt6.QtCore import QTimer
             bar = NSStatusBar.systemStatusBar()
-            self._status_item = bar.statusItemWithLength_(NSVariableStatusItemLength)
+            self._status_item = bar.statusItemWithLength_(_STATUS_ITEM_WIDTH)
+
+            # Wire right-click → context menu
+            self._menu_target = _StatusMenuTarget.new()
+            _menu_handlers[id(self._menu_target)] = self
+            btn = self._status_item.button()
+            btn.setTarget_(self._menu_target)
+            btn.setAction_("handleButtonClick:")
+            btn.sendActionOn_(_NSEventMaskRightMouseDown)
+
             self._status_scroll_timer = QTimer()
             self._status_scroll_timer.setInterval(_STATUS_SCROLL_INTERVAL_MS)
             self._status_scroll_timer.timeout.connect(self._advance_status_scroll)
@@ -191,7 +247,8 @@ class MacOSMediaHandler:
         except Exception as exc:
             self._status_item = None
             self._status_scroll_timer = None
-            logger.debug("macOS status item setup failed: %s", exc)
+            self._menu_target = None
+            logger.warning("macOS status item setup failed: %s", exc, exc_info=True)
 
     def _update_status_item(self, track: "Track | None", is_playing: bool) -> None:
         if self._status_item is None:
@@ -219,10 +276,8 @@ class MacOSMediaHandler:
         if self._status_item is None:
             return
         try:
-            from AppKit import NSVariableStatusItemLength
             if hasattr(self._status_item, "setLength_"):
-                length = NSVariableStatusItemLength if visible else 0.0
-                self._status_item.setLength_(length)
+                self._status_item.setLength_(_STATUS_ITEM_WIDTH if visible else 0.0)
             button = self._status_item.button()
             if button is not None:
                 button.setHidden_(not visible)
@@ -260,6 +315,32 @@ class MacOSMediaHandler:
         timer = self._status_scroll_timer
         if timer is not None and timer.isActive():
             timer.stop()
+
+    def _show_status_context_menu(self) -> None:
+        try:
+            from AppKit import NSMenu, NSMenuItem
+            menu = NSMenu.alloc().initWithTitle_("Omnia")
+            menu.setAutoenablesItems_(False)
+
+            def _item(title: str, action: str, enabled: bool = True) -> NSMenuItem:
+                it = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                    title, action, ""
+                )
+                it.setTarget_(self._menu_target)
+                it.setEnabled_(enabled)
+                return it
+
+            has_track = self._status_track is not None
+            menu.addItem_(_item("上一首", "prevTrack:", has_track))
+            play_title = "暂停" if self._status_is_playing else "播放"
+            menu.addItem_(_item(play_title, "playPause:", has_track))
+            menu.addItem_(_item("下一首", "nextTrack:", has_track))
+            menu.addItem_(NSMenuItem.separatorItem())
+            menu.addItem_(_item("退出 Omnia", "quitApp:"))
+
+            self._status_item.popUpStatusItemMenu_(menu)
+        except Exception as exc:
+            logger.debug("Status context menu failed: %s", exc)
 
     @staticmethod
     def _status_base_text(track: "Track") -> str:

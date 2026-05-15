@@ -98,6 +98,7 @@ class AppController(QObject):
     volume_changed = pyqtSignal(int)
     artist_ready = pyqtSignal(object)         # Artist
     artist_tracks_ready = pyqtSignal(list)    # list[Track]
+    update_status_ready = pyqtSignal(object)  # UpdateStatus
 
     def __init__(self) -> None:
         super().__init__()
@@ -634,7 +635,19 @@ class AppController(QObject):
         val = await self._repo.get_setting("volume")
         return int(val) if val else 70
 
+    def stop_audio_sync(self) -> None:
+        """Synchronous audio stop — called on aboutToQuit before event loop exits."""
+        try:
+            self._vlc.stop()
+        except Exception:
+            pass
+        try:
+            self._librespot.stop()
+        except Exception:
+            pass
+
     async def close(self) -> None:
+        self._vlc.stop()
         self._librespot.stop()
         self._librespot_bridge.close()
         await self._repo.close()
@@ -911,6 +924,8 @@ class AppController(QObject):
             "display_name",
             "background_image_path",
             "background_pure_black",
+            "auto_standby_minutes",
+            "auto_update",
         )
         result = {}
         for key in keys:
@@ -942,6 +957,23 @@ class AppController(QObject):
             self.background_changed.emit(value)
         elif key == "background_pure_black":
             self.background_changed.emit(self._background_image_path)
+
+    # ── update ────────────────────────────────────────────────────────────────
+
+    async def check_for_update(self) -> None:
+        from core import updater
+        status = await updater.check_for_update()
+        self.update_status_ready.emit(status)
+
+    async def apply_update(self) -> None:
+        from core import updater
+        success, _ = await updater.apply_update()
+        if success:
+            updater.restart_app()
+        else:
+            from core.updater import UpdateStatus
+            status = UpdateStatus(available=True, error="更新失败，请检查网络或手动 git pull")
+            self.update_status_ready.emit(status)
 
     # ── search history ────────────────────────────────────────────────────────
 
